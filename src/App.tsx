@@ -33,6 +33,12 @@ interface Review {
   date: string;
 }
 
+// --- НАСТРОЙКИ TELEGRAM ---
+// Токен вашего бота (получен у @BotFather)
+const TELEGRAM_BOT_TOKEN = '8790461264:AAGLzB3NrwghrfMgHvSt7D19H5d3MoNy_ew';
+// Ваш chat_id (узнать через https://api.telegram.org/bot<ТОКЕН>/getUpdates)
+const TELEGRAM_CHAT_ID = '7545602942';
+
 const categories = [
   { name: 'Все', image: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=150&auto=format&fit=crop&q=60" },
   { name: 'Аксесуары', image: "https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=150&auto=format&fit=crop&q=60" },
@@ -54,6 +60,13 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState('Все');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+
+  // Оформление заказа
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [orderName, setOrderName] = useState('');
+  const [orderPhone, setOrderPhone] = useState('');
+  const [orderAddress, setOrderAddress] = useState('');
+  const [isSendingOrder, setIsSendingOrder] = useState(false);
 
   // Админка
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -246,6 +259,68 @@ export default function App() {
 
   const updateQuantity = (id: number, delta: number) => {
     setCart(prev => prev.map(item => item.id === id ? { ...item, quantity: item.quantity + delta } : item).filter(item => item.quantity > 0));
+  };
+
+  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  // --- ОТПРАВКА ЗАКАЗА В TELEGRAM ---
+  const handleSubmitOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!orderName.trim() || !orderPhone.trim() || !orderAddress.trim()) {
+      alert('Будь ласка, заповніть усі поля!');
+      return;
+    }
+
+    if (cart.length === 0) {
+      alert('Кошик порожній!');
+      return;
+    }
+
+    const itemsText = cart
+      .map(item => `• ${item.name} — ${item.quantity} шт. x ${item.price} ₴ = ${item.price * item.quantity} ₴`)
+      .join('\n');
+
+    const message =
+      `🛒 *Нове замовлення з AUTOSHOP-MARKET*\n\n` +
+      `👤 Ім'я: ${orderName}\n` +
+      `📞 Телефон: ${orderPhone}\n` +
+      `📍 Адреса доставки: ${orderAddress}\n\n` +
+      `*Товари:*\n${itemsText}\n\n` +
+      `💰 *Разом: ${cartTotal} ₴*`;
+
+    setIsSendingOrder(true);
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: TELEGRAM_CHAT_ID,
+          text: message,
+          parse_mode: 'Markdown'
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.ok) {
+        alert('Дякуємо! Ваше замовлення прийнято, найближчим часом з вами зв\'яжуться.');
+        setCart([]);
+        setOrderName('');
+        setOrderPhone('');
+        setOrderAddress('');
+        setIsCheckoutOpen(false);
+        setIsCartOpen(false);
+      } else {
+        alert('Помилка відправки замовлення. Спробуйте ще раз або зв\'яжіться з нами напряму.');
+        console.error('Telegram error:', data);
+      }
+    } catch (err) {
+      alert('Помилка відправки замовлення. Перевірте інтернет-з\'єднання.');
+      console.error(err);
+    } finally {
+      setIsSendingOrder(false);
+    }
   };
 
   return (
@@ -482,23 +557,110 @@ export default function App() {
               <button onClick={() => setIsCartOpen(false)} className="text-slate-400">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {cart.map((item) => (
-                <div key={item.id} className="flex gap-4 border-b pb-4">
-                  <img src={item.images[0]} alt="" className="h-14 w-14 rounded-lg object-cover" />
-                  <div className="flex flex-1 flex-col justify-between">
-                    <h4 className="text-xs font-medium text-slate-800 line-clamp-1">{item.name}</h4>
-                    <div className="flex items-center justify-between mt-1">
-                      <div className="flex items-center gap-1 bg-slate-100 rounded p-0.5">
-                        <button onClick={() => updateQuantity(item.id, -1)} className="px-1.5">-</button>
-                        <span className="text-xs font-bold">{item.quantity}</span>
-                        <button onClick={() => updateQuantity(item.id, 1)} className="px-1.5">+</button>
+              {cart.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 py-12">Кошик порожній</p>
+              ) : (
+                cart.map((item) => (
+                  <div key={item.id} className="flex gap-4 border-b pb-4">
+                    <img src={item.images[0]} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                    <div className="flex flex-1 flex-col justify-between">
+                      <h4 className="text-xs font-medium text-slate-800 line-clamp-1">{item.name}</h4>
+                      <div className="flex items-center justify-between mt-1">
+                        <div className="flex items-center gap-1 bg-slate-100 rounded p-0.5">
+                          <button onClick={() => updateQuantity(item.id, -1)} className="px-1.5">-</button>
+                          <span className="text-xs font-bold">{item.quantity}</span>
+                          <button onClick={() => updateQuantity(item.id, 1)} className="px-1.5">+</button>
+                        </div>
+                        <span className="text-xs font-bold">{item.price * item.quantity} ₴</span>
                       </div>
-                      <span className="text-xs font-bold">{item.price * item.quantity} ₴</span>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
+            {cart.length > 0 && (
+              <div className="border-t p-6 space-y-3">
+                <div className="flex items-center justify-between text-sm font-bold">
+                  <span>Разом:</span>
+                  <span>{cartTotal} ₴</span>
+                </div>
+                <button
+                  onClick={() => setIsCheckoutOpen(true)}
+                  className="w-full bg-[#7a12df] text-white py-2.5 rounded-xl font-bold"
+                >
+                  Оформити замовлення
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* МОДАЛКА ОФОРМЛЕНИЯ ЗАКАЗА */}
+      {isCheckoutOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="absolute inset-0" onClick={() => !isSendingOrder && setIsCheckoutOpen(false)} />
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold">Оформлення замовлення</h2>
+              <button onClick={() => setIsCheckoutOpen(false)} className="text-slate-400 text-lg">✕</button>
+            </div>
+
+            <form onSubmit={handleSubmitOrder} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Ваше ім'я *</label>
+                <input
+                  type="text"
+                  value={orderName}
+                  onChange={e => setOrderName(e.target.value)}
+                  placeholder="Іван Петренко"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg bg-white outline-none focus:border-purple-500 text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Номер телефону *</label>
+                <input
+                  type="tel"
+                  value={orderPhone}
+                  onChange={e => setOrderPhone(e.target.value)}
+                  placeholder="+380 XX XXX XX XX"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg bg-white outline-none focus:border-purple-500 text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Адреса доставки (відділення Нової Пошти) *</label>
+                <input
+                  type="text"
+                  value={orderAddress}
+                  onChange={e => setOrderAddress(e.target.value)}
+                  placeholder="м. Дніпро, відділення №1, вул. ..."
+                  className="w-full p-2.5 border border-slate-300 rounded-lg bg-white outline-none focus:border-purple-500 text-sm"
+                  required
+                />
+              </div>
+
+              <div className="bg-slate-50 border rounded-lg p-3 text-xs space-y-1 max-h-32 overflow-y-auto">
+                {cart.map(item => (
+                  <div key={item.id} className="flex justify-between">
+                    <span className="text-slate-600 line-clamp-1 pr-2">{item.name} x{item.quantity}</span>
+                    <span className="font-semibold shrink-0">{item.price * item.quantity} ₴</span>
+                  </div>
+                ))}
+                <div className="flex justify-between font-bold border-t pt-1 mt-1">
+                  <span>Разом:</span>
+                  <span>{cartTotal} ₴</span>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSendingOrder}
+                className="w-full bg-[#7a12df] text-white py-2.5 rounded-xl font-bold disabled:opacity-60"
+              >
+                {isSendingOrder ? 'Відправка...' : 'Підтвердити замовлення'}
+              </button>
+            </form>
           </div>
         </div>
       )}
