@@ -555,7 +555,7 @@ export default function App() {
                           rel="noreferrer"
                           className="absolute right-3 top-3 z-10 rounded bg-white/15 px-2 py-1 text-[10px] font-bold text-white backdrop-blur hover:bg-white/25"
                         >
-                          Dropt
+                          +
                         </a>
                       )}
                     </div>
