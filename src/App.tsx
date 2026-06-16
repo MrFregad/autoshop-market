@@ -33,18 +33,109 @@ interface Review {
   date: string;
 }
 
+interface CategoryItem {
+  name: string;
+  image: string;
+  subtitle: string;
+  sourceUrl?: string;
+}
+
 // --- НАСТРОЙКИ TELEGRAM ---
 // Токен вашего бота (получен у @BotFather)
 const TELEGRAM_BOT_TOKEN = '8790461264:AAGLzB3NrwghrfMgHvSt7D19H5d3MoNy_ew';
 // Ваш chat_id (узнать через https://api.telegram.org/bot<ТОКЕН>/getUpdates)
 const TELEGRAM_CHAT_ID = '7545602942';
 
-const categories = [
-  { name: 'Все', image: "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=150&auto=format&fit=crop&q=60" },
-  { name: 'Аксесуары', image: "https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=150&auto=format&fit=crop&q=60" },
-  { name: 'Електроника', image: "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=150&auto=format&fit=crop&q=60" },
-  { name: 'Парфюмерия', image: "https://images.unsplash.com/photo-1541643600914-78b084683601?w=150&auto=format&fit=crop&q=60" },
-  { name: 'Автохімія', image: "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=150&auto=format&fit=crop&q=60" },
+const categories: CategoryItem[] = [
+  {
+    name: 'Усі',
+    subtitle: 'Повний каталог автотоварів',
+    image: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Інвертори',
+    subtitle: 'Живлення в дорозі',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/invertory',
+    image: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Автоакустика',
+    subtitle: 'Звук для салону',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/avtoakustika',
+    image: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Автомагнітоли',
+    subtitle: 'Мультимедіа та керування',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/avtomagnitoly',
+    image: 'https://images.unsplash.com/photo-1489686995744-f47e995ffe61?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Автомобільне світло',
+    subtitle: 'Фари, LED та підсвітка',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/avtomobilnyy-svet',
+    image: 'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Автомобільний зарядний пристрій',
+    subtitle: 'Зарядка для гаджетів',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/avtomobilnoe-zaryadnoe-ustroystvo',
+    image: 'https://dropt.in.ua/image/cache/catalog/products/56/56839_a6c67cfeb09b-228x228.png',
+  },
+  {
+    name: 'Аксесуари',
+    subtitle: 'Корисні дрібниці для авто',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/aksessuary',
+    image: 'https://images.unsplash.com/photo-1542362567-b07e54358753?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Відеореєстратори',
+    subtitle: 'Запис поїздок і безпека',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/videoregistratory',
+    image: 'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Компресор',
+    subtitle: 'Тиск у шинах під контролем',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/kompressor',
+    image: 'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Монітори та камери заднього виду',
+    subtitle: 'Огляд і паркування',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/monitory-i-kamery-zadnego-vida',
+    image: 'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Навігатори',
+    subtitle: 'Маршрути без зайвих нервів',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/navigatory',
+    image: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Перетворювачі',
+    subtitle: 'Стабільна напруга',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/preobrazovateli',
+    image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Пускозарядні',
+    subtitle: 'Старт двигуна будь-коли',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/puskozaryadnye',
+    image: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Трансмітери',
+    subtitle: 'Bluetooth та FM-зв’язок',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/transmittery',
+    image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=420&auto=format&fit=crop&q=70',
+  },
+  {
+    name: 'Тримачі, розгалужувачі',
+    subtitle: 'Зручність для кожної поїздки',
+    sourceUrl: 'https://dropt.in.ua/ua/avtotovary/derzhateli-razvetviteli',
+    image: 'https://images.unsplash.com/photo-1517026575980-3e1e2dedeab4?w=420&auto=format&fit=crop&q=70',
+  },
 ];
 
 export default function App() {
@@ -57,7 +148,7 @@ export default function App() {
   const [selectedReviewImage, setSelectedReviewImage] = useState<string>('');
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Все');
+  const [selectedCategory, setSelectedCategory] = useState('Усі');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -132,7 +223,7 @@ export default function App() {
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
-      const matchesCategory = selectedCategory === 'Все' || product.category === selectedCategory;
+      const matchesCategory = selectedCategory === 'Усі' || product.category === selectedCategory;
       if (searchQuery === ADMIN_PASSWORD) return matchesCategory;
       return matchesCategory && product.name.toLowerCase().includes(searchQuery.toLowerCase());
     });
@@ -369,7 +460,7 @@ export default function App() {
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Категорія</label>
                 <select value={formCategory} onChange={e => setFormCategory(e.target.value)} className="w-full p-2 border border-slate-300 rounded bg-white outline-none h-[33px]">
-                  {categories.filter(c => c.name !== 'Все').map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  {categories.filter(c => c.name !== 'Усі').map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
                 </select>
               </div>
               <div>
@@ -420,15 +511,57 @@ export default function App() {
         <>
           {/* СЕТКА КАТЕГОРИЙ */}
           <div className="bg-white border-b shadow-sm">
-            <div className="mx-auto max-w-7xl px-4 py-3 flex overflow-x-auto gap-6 justify-center">
-              {categories.map((cat) => (
-                <button key={cat.name} onClick={() => setSelectedCategory(cat.name)} className="flex flex-col items-center gap-1 shrink-0">
-                  <div className={`w-12 h-12 rounded-full overflow-hidden border p-0.5 ${selectedCategory === cat.name ? 'border-purple-600 ring-2 ring-purple-100' : 'border-slate-200'}`}>
-                    <img src={cat.image} alt="" className="w-full h-full object-cover rounded-full" />
-                  </div>
-                  <span className="text-[10px] font-semibold text-slate-600">{cat.name}</span>
-                </button>
-              ))}
+            <div className="mx-auto max-w-7xl px-4 py-5">
+              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-600">Підбір за напрямком</p>
+                  <h2 className="text-xl font-black text-slate-950">Категорії для твого авто</h2>
+                </div>
+                <p className="max-w-md text-xs text-slate-500">
+                  Обери розділ, щоб швидко знайти товари для комфорту, безпеки та щоденних поїздок.
+                </p>
+              </div>
+
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {categories.map((cat) => {
+                  const isActive = selectedCategory === cat.name;
+
+                  return (
+                    <div
+                      key={cat.name}
+                      className={`group relative h-32 w-[210px] shrink-0 overflow-hidden rounded-lg border shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                        isActive ? 'border-purple-600 ring-2 ring-purple-100' : 'border-slate-200'
+                      }`}
+                    >
+                      <button onClick={() => setSelectedCategory(cat.name)} className="absolute inset-0 text-left">
+                        <img src={cat.image} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/35 to-transparent" />
+                        <div className="absolute inset-x-0 bottom-0 p-3 text-white">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="block text-sm font-black leading-tight">{cat.name}</span>
+                              <span className="mt-1 block text-[11px] font-medium text-white/80">{cat.subtitle}</span>
+                            </div>
+                            {isActive && (
+                              <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-purple-700">Обрано</span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                      {cat.sourceUrl && (
+                        <a
+                          href={cat.sourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="absolute right-3 top-3 z-10 rounded bg-white/15 px-2 py-1 text-[10px] font-bold text-white backdrop-blur hover:bg-white/25"
+                        >
+                          Dropt
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
