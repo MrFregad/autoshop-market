@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, ShoppingCart, X, Plus, Minus, 
-  Trash2, Settings, Edit2, ArrowLeft, Star 
+  Trash2, Settings, Edit2, ArrowLeft, Star,
+  Phone, Mail, Clock, Truck, CreditCard, AlertTriangle,
+  PackageCheck, MapPin
 } from 'lucide-react';
 // Импортируем наше подключение к базе
 import { supabase } from './supabaseClient';
@@ -122,6 +124,33 @@ const categories: CategoryItem[] = [
     subtitle: 'Зручність для кожної поїздки',
     image: 'https://images.unsplash.com/photo-1517026575980-3e1e2dedeab4?w=420&auto=format&fit=crop&q=70',
   },
+];
+
+const oversizedCategories = [
+  'Дитячі автокрісла',
+  'Лебідки електричні',
+  'Автомобільні акумулятори',
+  'Вантажні акумулятори',
+  'Вантажні бокси',
+  'Велокріплення',
+  'Захист днища',
+  'Багажники на дах',
+  'Лодочні акумулятори',
+  'Фаркопи',
+  'Лежаки',
+  'Тягові акумулятори',
+  'Мото акумулятори',
+  'Силові бампери та дуги',
+  'Антикрила та спойлери',
+  'Решітки радіатора',
+  'Багажні корзини',
+  'Крани і гідравлічні циліндри',
+  'Домкрати підкатні',
+  'Домкрати рейкові',
+  'Ручні лебідки',
+  'Автопалатки',
+  'Павільйони',
+  'Дитячі велокрісла',
 ];
 
 export default function App() {
@@ -411,11 +440,11 @@ export default function App() {
 
           <form onSubmit={handleSearchSubmit} className="flex flex-1 max-w-xl items-center border border-slate-300 rounded-lg bg-[#f4f4f4] focus-within:border-purple-600 focus-within:bg-white transition-all">
             <input
-              type="text" placeholder="Искать..." value={searchQuery}
+              type="text" placeholder="Пошук товарів..." value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-transparent py-2 px-3 text-sm outline-none text-slate-900"
             />
-            <button type="submit" className="bg-[#ebebeb] text-sm text-slate-700 px-4 py-2 rounded-r-lg border-l border-slate-300 hover:bg-slate-200 font-medium">Найти</button>
+            <button type="submit" className="bg-[#ebebeb] text-sm text-slate-700 px-4 py-2 rounded-r-lg border-l border-slate-300 hover:bg-slate-200 font-medium">Знайти</button>
           </form>
 
           <div className="flex items-center gap-4 shrink-0">
@@ -425,7 +454,8 @@ export default function App() {
               </button>
             )}
             <button onClick={() => setIsCartOpen(true)} className="flex items-center gap-1.5 bg-purple-50 text-purple-700 px-3 py-2 rounded-lg font-semibold text-xs border border-purple-200 hover:bg-purple-100 relative">
-              <span>Карзина ({cart.reduce((sum, item) => sum + item.quantity, 0)})</span>
+              <ShoppingCart className="h-4 w-4" />
+              <span>Кошик ({cart.reduce((sum, item) => sum + item.quantity, 0)})</span>
             </button>
           </div>
         </div>
@@ -570,6 +600,151 @@ export default function App() {
                 ))}
               </div>
             )}
+
+            <section className="mt-10 space-y-6">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="rounded-xl border bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50 text-purple-700">
+                    <Phone className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-sm font-black text-slate-950">Call-Center</h3>
+                  <p className="mt-1 text-xs text-slate-500">Консультації та обробка замовлень</p>
+                  <a href="tel:0976020714" className="mt-3 block text-lg font-black text-slate-950">097-602-0714</a>
+                </div>
+
+                <div className="rounded-xl border bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-sky-50 text-sky-700">
+                    <Mail className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-sm font-black text-slate-950">E-mail</h3>
+                  <p className="mt-1 text-xs text-slate-500">Пишіть щодо замовлень та уточнень</p>
+                  <a href="mailto:dneprogorb777@gmail.com" className="mt-3 block break-all text-sm font-bold text-slate-950">dneprogorb777@gmail.com</a>
+                </div>
+
+                <div className="rounded-xl border bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                    <Clock className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-sm font-black text-slate-950">Графік роботи</h3>
+                  <div className="mt-3 space-y-1 text-xs font-semibold text-slate-700">
+                    <p>Пн-Пт: 08:00 - 21:00</p>
+                    <p>Сб: 09:00 - 19:00</p>
+                    <p>Нд: 09:00 - 18:00</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+                <div className="lg:col-span-7 rounded-xl border bg-white p-5 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-700">
+                      <Truck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-600">Доставка</p>
+                      <h3 className="text-lg font-black text-slate-950">Самовивіз з відділень та поштоматів перевізників</h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        Замовлення можна отримати у відділеннях «Укрпошта», а також у відділеннях і поштоматах «Нова Пошта».
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg bg-slate-50 p-4">
+                      <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                        <PackageCheck className="h-4 w-4 text-emerald-600" />
+                        Графік відправлень
+                      </div>
+                      <p className="mt-2 text-xs text-slate-600">Пн-Сб</p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-4">
+                      <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                        <MapPin className="h-4 w-4 text-purple-600" />
+                        Вартість доставки
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-slate-600">
+                        Розраховується згідно з тарифом перевізника та може змінюватися залежно від об'єму, вартості й кількості товарів.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                      <div className="text-xs leading-5 text-amber-950">
+                        <p className="font-bold">При отриманні замовлення обов'язково перевіряйте наявність усіх товарів, зовнішній вигляд і комплектацію.</p>
+                        <p className="mt-1">
+                          У разі пошкодження або неповної комплектації відмовтеся від отримання всього замовлення та повідомте про це за телефоном гарячої лінії 0800-31-08-93. Отримавши замовлення у перевізника, ви погоджуєтеся з його зовнішнім станом та комплектацією.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 text-xs leading-5 text-slate-600">
+                    Доставка вантажних боксів здійснюється за рахунок покупця за передплатою. Сума передплати дорівнює розрахунку доставки боксу в обидві сторони. Якщо бокс не було забрано у перевізника з вини клієнта, передплата не повертається.
+                  </p>
+                </div>
+
+                <div className="lg:col-span-5 rounded-xl border bg-white p-5 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                      <CreditCard className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-600">Оплата</p>
+                      <h3 className="text-lg font-black text-slate-950">Зручна оплата при отриманні</h3>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    <div className="rounded-lg border border-slate-200 p-4">
+                      <h4 className="text-sm font-bold text-slate-950">Готівка</h4>
+                      <p className="mt-2 text-xs leading-5 text-slate-600">
+                        Оплатити замовлення готівкою можна при отриманні у відділенні Нової Пошти або Укрпошти.
+                      </p>
+                      <p className="mt-2 text-xs font-bold text-emerald-700">Комісія: відсутня</p>
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 p-4">
+                      <h4 className="text-sm font-bold text-slate-950">Накладений платіж</h4>
+                      <p className="mt-2 text-xs leading-5 text-slate-600">
+                        Послуга перевізника, за якої оплатити замовлення можна при отриманні. Доступна для «Нова Пошта» та «Укрпошта».
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-slate-600">
+                        Комісія «Нова Пошта» - 1.8% або 3.6% при сплаті картою, але не менше 10 грн. Комісія «Укрпошта» - 2% від суми замовлення, але не менше 10 грн.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-white p-5 shadow-sm">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+                  <div className="lg:col-span-5">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-600">Обмеження перевізників</p>
+                    <h3 className="mt-1 text-lg font-black text-slate-950">Що може не відправлятися</h3>
+                    <div className="mt-4 space-y-3 text-xs leading-5 text-slate-600">
+                      <p><span className="font-bold text-slate-900">«Укрпошта»:</span> акумулятори, товари понад 70 см максимальної довжини або більше 30 кг ваги.</p>
+                      <p><span className="font-bold text-slate-900">«Нова Пошта поштомат»:</span> крупногабаритні товари, товари більше 40х60х30 см або вагою більше 20 кг, а також замовлення загальною вартістю понад 10000 грн.</p>
+                      <p className="rounded-lg bg-rose-50 p-3 text-rose-900">
+                        Отримати замовлення необхідно протягом 5 днів з моменту прибуття. Якщо замовлення не забране, на 5-й день воно повертається відправникові.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-7">
+                    <h4 className="text-sm font-black text-slate-950">Перелік категорій з великогабаритними товарами</h4>
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {oversizedCategories.map((category) => (
+                        <div key={category} className="rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+                          {category}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
           </main>
         </>
       ) : (
@@ -662,7 +837,7 @@ export default function App() {
           <div className="absolute inset-0" onClick={() => setIsCartOpen(false)} />
           <div className="relative flex h-full w-full max-w-md flex-col bg-white">
             <div className="flex items-center justify-between border-b px-6 py-4">
-              <h2 className="text-base font-bold">Карзина заказов</h2>
+              <h2 className="text-base font-bold">Кошик замовлень</h2>
               <button onClick={() => setIsCartOpen(false)} className="text-slate-400">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
