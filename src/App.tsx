@@ -85,6 +85,11 @@ const categories: CategoryItem[] = [
     image: 'https://images.unsplash.com/photo-1542362567-b07e54358753?w=420&auto=format&fit=crop&q=70',
   },
   {
+    name: 'Автохімія',
+    subtitle: 'Догляд, очищення та захист',
+    image: 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=420&auto=format&fit=crop&q=70',
+  },
+  {
     name: 'Відеореєстратори',
     subtitle: 'Запис поїздок і безпека',
     image: 'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=420&auto=format&fit=crop&q=70',
