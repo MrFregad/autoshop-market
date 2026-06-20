@@ -808,11 +808,15 @@ export default function App() {
           </div>
 
           <main className="mx-auto max-w-7xl px-4 py-6">
-            {/* Hot Deals */}
-            <HotDeals products={products} onProductClick={setActiveProductId} onAddToCart={addToCart} />
-
-            {/* Info Tabs — moved from bottom to top */}
-            <InfoTabs />
+            {/* Hot Deals + Info Tabs side by side */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-2">
+              <div className="lg:col-span-4">
+                <InfoTabs />
+              </div>
+              <div className="lg:col-span-8">
+                <HotDeals products={products} onProductClick={setActiveProductId} onAddToCart={addToCart} />
+              </div>
+            </div>
 
             {/* Products Grid */}
             {filteredProducts.length === 0 ? (
