@@ -158,8 +158,8 @@ const InfoTabs = () => {
   return (
     <motion.section initial="hidden" animate="visible" variants={fadeInUp} className="mb-6">
       <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
-        {/* Tab headers */}
-        <div className="flex border-b overflow-x-auto">
+        {/* Tab headers — vertical list */}
+        <div className="flex flex-col divide-y">
           {tabs.map((tab) => {
             const c = colorMap[tab.color];
             const isActive = activeTab === tab.id;
@@ -167,19 +167,22 @@ const InfoTabs = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 text-xs font-bold whitespace-nowrap transition-all ${
-                  isActive ? `${c.activeBg} ${c.activeText}` : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                className={`flex items-center justify-between gap-2 px-4 py-3 text-xs font-bold transition-all ${
+                  isActive ? `${c.activeBg} ${c.activeText}` : 'text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {tab.icon}
-                {tab.label}
+                <span className="flex items-center gap-2">
+                  {tab.icon}
+                  {tab.label}
+                </span>
+                <ChevronRight className={`h-4 w-4 transition-transform ${isActive ? 'rotate-90' : ''}`} />
               </button>
             );
           })}
         </div>
 
         {/* Tab content */}
-        <div className="p-5">
+        <div className="p-5 border-t">
           <AnimatePresence mode="wait">
             {activeTab === 'delivery' && (
               <motion.div key="delivery" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
