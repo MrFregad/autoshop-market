@@ -206,8 +206,8 @@ const InfoTabs = () => {
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
                     <p className="text-xs leading-5 text-amber-900">
-                      <span className="font-bold">При отриманні замовлення обов\u2019язково перевіряйте наявність усіх товарів, зовнішній вигляд і комплектацію.</span>
-                      <br />У разі пошкодження — відмовтеся та повідомте за телефоном гарячої лінії 0800-31-08-93.
+                      <span className="font-bold">При отриманні замовлення обов'язково перевіряйте наявність усіх товарів, зовнішній вигляд і комплектацію.</span>
+                      <br />У разі пошкодження — відмовтеся та повідомте за телефоном 097-602-0714.
                     </p>
                   </div>
                 </div>
@@ -415,6 +415,8 @@ export default function App() {
   const [selectedReviewImage, setSelectedReviewImage] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Усі');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PRODUCTS_PER_PAGE = 15;
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showAddedToast, setShowAddedToast] = useState<number | null>(null);
@@ -511,6 +513,18 @@ export default function App() {
       return matchesCategory && product.name.toLowerCase().includes(searchQuery.toLowerCase());
     });
   }, [products, searchQuery, selectedCategory]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+
+  const paginatedProducts = useMemo(() => {
+    const start = (currentPage - 1) * PRODUCTS_PER_PAGE;
+    return filteredProducts.slice(start, start + PRODUCTS_PER_PAGE);
+  }, [filteredProducts, currentPage]);
+
+  // Сброс на первую страницу при смене категории/поиска
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, searchQuery]);
 
   const currentProduct = useMemo(() => products.find(p => p.id === activeProductId) || null, [activeProductId, products]);
   const currentProductReviews = useMemo(() => reviews.filter(r => r.product_id === activeProductId), [reviews, activeProductId]);
@@ -810,7 +824,7 @@ export default function App() {
             ) : (
               <motion.div layout className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
                 <AnimatePresence>
-                  {filteredProducts.map((product, i) => (
+                  {paginatedProducts.map((product, i) => (
                     <motion.div
                       key={product.id}
                       custom={i}
@@ -869,6 +883,41 @@ export default function App() {
                   ))}
                 </AnimatePresence>
               </motion.div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-8">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-lg border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-9 h-9 rounded-lg text-xs font-bold transition ${
+                      currentPage === page
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white border text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-lg border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             )}
 
             {/* Trust badges */}
