@@ -419,7 +419,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Усі');
   const [currentPage, setCurrentPage] = useState(1);
-  const PRODUCTS_PER_PAGE = 15;
+  const PRODUCTS_PER_PAGE = 18;
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [showAddedToast, setShowAddedToast] = useState<number | null>(null);
