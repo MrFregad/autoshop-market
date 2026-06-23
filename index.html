@@ -3,53 +3,98 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#6d28d9" />
 
-    <!-- ─── Основные мета-теги SEO ─── -->
-    <title>AutoShop Market — автотовари з доставкою по Україні</title>
-    <meta name="description" content="Інтернет-магазин автотоварів: магнітоли, реєстратори, інвертори, компресори, LED-фари, акустика. Доставка по Україні. Вигідні ціни." />
-    <meta name="keywords" content="автотовари, автомагнітола, відеореєстратор, інвертор, компресор, LED фари, автоакустика, купити, Україна, доставка" />
-    <meta name="robots" content="index, follow" />
+    <title>AutoShop Market - автотовари з доставкою по Україні</title>
+    <meta
+      name="description"
+      content="AutoShop Market - інтернет-магазин автотоварів: автомагнітоли, відеореєстратори, інвертори, компресори, LED-фари, автоакустика та аксесуари з доставкою по Україні."
+    />
+    <meta
+      name="keywords"
+      content="автотовари, автотовари купити, автотовары, автомагнітола, автомагнитола, відеореєстратор, видеорегистратор, автоакустика, LED фари, компресор автомобільний, інвертор 12 220, аксесуари для авто, Україна, доставка"
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta name="author" content="AutoShop Market" />
     <link rel="canonical" href="https://autoshop-market.vercel.app/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <!-- ─── Open Graph (Facebook, Viber, Telegram превью) ─── -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://autoshop-market.vercel.app/" />
-    <meta property="og:title" content="AutoShop Market — автотовари з доставкою по Україні" />
-    <meta property="og:description" content="Магнітоли, реєстратори, інвертори, компресори, LED-фари та аксесуари. Доставка по Україні." />
-    <meta property="og:image" content="https://autoshop-market.vercel.app/og-image.jpg" />
+    <meta property="og:title" content="AutoShop Market - автотовари з доставкою по Україні" />
+    <meta
+      property="og:description"
+      content="Автомагнітоли, відеореєстратори, інвертори, компресори, LED-фари, автоакустика та аксесуари для авто. Доставка по Україні."
+    />
+    <meta property="og:image" content="https://autoshop-market.vercel.app/favicon.svg" />
     <meta property="og:locale" content="uk_UA" />
     <meta property="og:site_name" content="AutoShop Market" />
 
-    <!-- ─── Structured Data: Магазин (Schema.org) ─── -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="AutoShop Market - автотовари з доставкою по Україні" />
+    <meta
+      name="twitter:description"
+      content="Інтернет-магазин автотоварів: світло, електроніка, автоакустика, компресори та корисні аксесуари."
+    />
+    <meta name="twitter:image" content="https://autoshop-market.vercel.app/favicon.svg" />
+
     <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "AutoPartsStore",
-      "name": "AutoShop Market",
-      "description": "Інтернет-магазин автотоварів: магнітоли, реєстратори, інвертори, компресори, LED-фари, акустика",
-      "url": "https://autoshop-market.vercel.app",
-      "telephone": "+380976020714",
-      "priceRange": "₴₴",
-      "currenciesAccepted": "UAH",
-      "paymentAccepted": "Cash, Credit Card",
-      "areaServed": {
-        "@type": "Country",
-        "name": "Ukraine"
-      },
-      "address": {
-        "@type": "PostalAddress",
-        "addressCountry": "UA",
-        "addressRegion": "Дніпропетровська область"
-      },
-      "contactPoint": {
-        "@type": "ContactPoint",
-        "telephone": "+380976020714",
-        "contactType": "customer service",
-        "availableLanguage": ["Ukrainian", "Russian"]
-      },
-      "sameAs": []
-    }
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://autoshop-market.vercel.app/#organization",
+            "name": "AutoShop Market",
+            "url": "https://autoshop-market.vercel.app/",
+            "logo": "https://autoshop-market.vercel.app/favicon.svg",
+            "contactPoint": {
+              "@type": "ContactPoint",
+              "telephone": "+380976020714",
+              "contactType": "customer service",
+              "availableLanguage": ["uk", "ru"]
+            }
+          },
+          {
+            "@type": "AutoPartsStore",
+            "@id": "https://autoshop-market.vercel.app/#store",
+            "name": "AutoShop Market",
+            "description": "Інтернет-магазин автотоварів: автомагнітоли, відеореєстратори, інвертори, компресори, LED-фари, автоакустика та аксесуари.",
+            "url": "https://autoshop-market.vercel.app/",
+            "telephone": "+380976020714",
+            "priceRange": "₴₴",
+            "currenciesAccepted": "UAH",
+            "paymentAccepted": "Cash, Card",
+            "areaServed": {
+              "@type": "Country",
+              "name": "Ukraine"
+            },
+            "address": {
+              "@type": "PostalAddress",
+              "addressCountry": "UA",
+              "addressRegion": "Дніпропетровська область"
+            },
+            "parentOrganization": {
+              "@id": "https://autoshop-market.vercel.app/#organization"
+            }
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://autoshop-market.vercel.app/#website",
+            "name": "AutoShop Market",
+            "url": "https://autoshop-market.vercel.app/",
+            "publisher": {
+              "@id": "https://autoshop-market.vercel.app/#organization"
+            },
+            "inLanguage": "uk-UA",
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": "https://autoshop-market.vercel.app/?q={search_term_string}",
+              "query-input": "required name=search_term_string"
+            }
+          }
+        ]
+      }
     </script>
   </head>
   <body>
