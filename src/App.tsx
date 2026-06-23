@@ -9,6 +9,7 @@ import {
   TruckIcon, Wallet, FileText, MessageCircle
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
+import { useProductStructuredData } from './hooks/useProductStructuredData';
 
 // ─── Types ──────────────────────────────────────────────────
 interface Product {
@@ -415,7 +416,16 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [activeProductId, setActiveProductId] = useState<number | null>(null);
-  const [selectedReviewImage, setSelectedReviewImage] = useState<string>('');
+
+// Structured data для открытого товара
+const activeProduct = products.find(p => p.id === activeProductId) || 
+                      sampleProducts.find(p => p.id === activeProductId) || 
+                      null;
+useProductStructuredData(activeProduct);
+
+const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
+  activeProduct?.images[0] || ''
+);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Усі');
   const [currentPage, setCurrentPage] = useState(1);
