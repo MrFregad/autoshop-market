@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "youtube:ideas": "node scripts/youtubeMarketingBot.mjs ideas",
+    "youtube:metadata": "node scripts/youtubeMarketingBot.mjs metadata",
+    "youtube:video": "node scripts/youtubeMarketingBot.mjs video",
+    "youtube:render": "node scripts/youtubeMarketingBot.mjs render",
+    "youtube:upload": "node scripts/youtubeMarketingBot.mjs upload"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
