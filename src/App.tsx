@@ -644,24 +644,41 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm backdrop-blur-md bg-white/95">
-        <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4">
-          <motion.div onClick={() => setActiveProductId(null)} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
-            AUTO<span className="text-orange-500">SHOP</span>
-          </motion.div>
+        <div className="mx-auto max-w-7xl px-3 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4 sm:py-3">
+          <div className="flex items-center justify-between gap-3">
+            <motion.div onClick={() => setActiveProductId(null)} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
+              AUTO<span className="text-orange-500">SHOP</span>
+            </motion.div>
+            <div className="flex items-center gap-2 sm:hidden shrink-0">
+              {isAdminMode && (
+                <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => { setIsAdminMode(false); resetForm(); }} className="text-xs text-red-600 font-bold bg-red-50 px-2 py-1.5 rounded-lg border border-red-200">
+                  Вихід
+                </motion.button>
+              )}
+              <motion.button whileTap={{ scale: 0.95 }} onClick={() => setIsCartOpen(true)} className="flex items-center gap-1.5 bg-purple-600 text-white px-3 py-2 rounded-xl font-semibold text-xs hover:bg-purple-700 transition relative shadow-md">
+                <ShoppingCart className="h-4 w-4" />
+                {cartCount > 0 && (
+                  <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center">
+                    {cartCount}
+                  </motion.span>
+                )}
+              </motion.button>
+            </div>
+          </div>
 
           <form onSubmit={handleSearchSubmit} className="flex flex-1 max-w-xl items-center border border-slate-300 rounded-xl bg-slate-50 focus-within:border-purple-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-purple-100 transition-all">
             <input
               type="text" placeholder="Пошук товарів..." value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent py-2.5 px-4 text-sm outline-none text-slate-900"
+              className="w-full bg-transparent py-2.5 px-3 text-sm outline-none text-slate-900"
             />
-            <button type="submit" className="bg-purple-600 text-white text-sm px-5 py-2.5 rounded-r-xl font-semibold hover:bg-purple-700 transition-colors flex items-center gap-1">
+            <button type="submit" className="bg-purple-600 text-white text-sm px-4 py-2.5 rounded-r-xl font-semibold hover:bg-purple-700 transition-colors flex items-center gap-1 shrink-0">
               <Search className="h-4 w-4" />
               <span className="hidden sm:inline">Знайти</span>
             </button>
           </form>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden sm:flex items-center gap-3 shrink-0">
             {isAdminMode && (
               <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => { setIsAdminMode(false); resetForm(); }} className="flex items-center gap-1 text-xs text-red-600 font-bold bg-red-50 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-100 transition">
                 Вихід
@@ -669,7 +686,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             )}
             <motion.button whileTap={{ scale: 0.95 }} onClick={() => setIsCartOpen(true)} className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2.5 rounded-xl font-semibold text-xs hover:bg-purple-700 transition relative shadow-md">
               <ShoppingCart className="h-4 w-4" />
-              <span className="hidden sm:inline">Кошик</span>
+              <span>Кошик</span>
               {cartCount > 0 && (
                 <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center">
                   {cartCount}
@@ -776,7 +793,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         <>
           {/* Categories */}
           <div className="bg-white border-b shadow-sm">
-            <div className="mx-auto max-w-7xl px-4 py-5">
+            <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-5">
               <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-600">Підбір за напрямком</p>
@@ -784,7 +801,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </div>
                 <p className="max-w-md text-xs text-slate-500">Обери розділ, щоб швидко знайти потрібні товари.</p>
               </div>
-              <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+              <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
                 {categories.map((cat, i) => {
                   const isActive = selectedCategory === cat.name;
                   return (
@@ -796,20 +813,20 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                       variants={fadeInUp}
                       whileHover={{ y: -3 }}
                       onClick={() => setSelectedCategory(cat.name)}
-                      className={`group relative h-32 w-[210px] shrink-0 overflow-hidden rounded-xl border shadow-sm transition-all cursor-pointer ${
+                      className={`group relative h-24 w-[150px] sm:h-32 sm:w-[210px] shrink-0 overflow-hidden rounded-xl border shadow-sm transition-all cursor-pointer ${
                         isActive ? 'border-purple-600 ring-2 ring-purple-200' : 'border-slate-200'
                       }`}
                     >
                       <img src={cat.image} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent" />
-                      <div className="absolute inset-x-0 bottom-0 p-3 text-white">
-                        <div className="flex items-start justify-between gap-2">
+                      <div className="absolute inset-x-0 bottom-0 p-2 sm:p-3 text-white">
+                        <div className="flex items-start justify-between gap-1">
                           <div>
-                            <span className="block text-sm font-black leading-tight">{cat.name}</span>
-                            <span className="mt-1 block text-[11px] font-medium text-white/70">{cat.subtitle}</span>
+                            <span className="block text-xs sm:text-sm font-black leading-tight">{cat.name}</span>
+                            <span className="mt-0.5 hidden sm:block text-[11px] font-medium text-white/70">{cat.subtitle}</span>
                           </div>
                           {isActive && (
-                            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="rounded-full bg-purple-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-lg">Обрано</motion.span>
+                            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="rounded-full bg-purple-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-lg shrink-0">✓</motion.span>
                           )}
                         </div>
                       </div>
@@ -820,7 +837,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             </div>
           </div>
 
-          <main className="mx-auto max-w-7xl px-4 py-6">
+          <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
             {/* Hot Deals + Info Tabs side by side */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-2">
               <div className="lg:col-span-4">
@@ -973,7 +990,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         </>
       ) : (
         /* Product Detail Page */
-        <main className="mx-auto max-w-7xl px-4 py-6">
+        <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
           <motion.button
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -983,36 +1000,44 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             <ArrowLeft className="h-4 w-4" /> Назад до каталогу
           </motion.button>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-white border rounded-2xl p-6 shadow-sm">
-            <div className="lg:col-span-7 flex flex-col sm:flex-row gap-3">
-              <div className="flex sm:flex-col gap-2 overflow-x-auto shrink-0">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 bg-white border rounded-2xl p-3 sm:p-6 shadow-sm">
+            <div className="lg:col-span-7 flex flex-col gap-3">
+              <div className="flex gap-2 overflow-x-auto shrink-0 sm:hidden">
                 {currentProduct.images.map((img, index) => (
                   <motion.button
                     key={index}
-                    whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => setSelectedReviewImage(img)}
-                    className={`w-14 h-14 border-2 rounded-xl p-0.5 transition ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
+                    className={`w-12 h-12 border-2 rounded-lg p-0.5 transition shrink-0 ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
                   >
-                    <img src={img} alt="" className="w-full h-full object-cover rounded-lg" />
+                    <img src={img} alt="" className="w-full h-full object-cover rounded-md" />
                   </motion.button>
                 ))}
               </div>
-              <div className="flex-1 aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center max-h-[460px] relative">
-                {currentProduct.badge && (
-                  <div className="absolute top-3 left-3 z-10">
-                    <ProductBadge type={currentProduct.badge} />
-                  </div>
-                )}
+              <div className="hidden sm:flex gap-3">
+                <div className="flex flex-col gap-2 shrink-0">
+                  {currentProduct.images.map((img, index) => (
+                    <motion.button
+                      key={index}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setSelectedReviewImage(img)}
+                      className={`w-14 h-14 border-2 rounded-xl p-0.5 transition ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
+                    >
+                      <img src={img} alt="" className="w-full h-full object-cover rounded-lg" />
+                    </motion.button>
+                  ))}
+                </div>
+                <div className="flex-1 aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center max-h-[460px] relative">
+                  {currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
+                  <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />
+                  <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={selectedReviewImage || currentProduct.images[0]} alt="" className="w-full h-full object-contain" />
+                </div>
+              </div>
+              <div className="sm:hidden aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center relative">
+                {currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
                 <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />
-                <motion.img
-                  key={selectedReviewImage}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  src={selectedReviewImage || currentProduct.images[0]}
-                  alt=""
-                  className="w-full h-full object-contain"
-                />
+                <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={selectedReviewImage || currentProduct.images[0]} alt="" className="w-full h-full object-contain" />
               </div>
             </div>
 
