@@ -120,7 +120,16 @@ const oversizedCategories = [
 ];
 
 // ─── Sample products for demo ───────────────────────────────
-
+const sampleProducts: Product[] = [
+  { id: 1, name: 'Автомагнітола Pioneer MVH-S120UBG', category: 'Автомагнітоли', price: 1899, old_price: 2499, images: ['https://images.unsplash.com/photo-1489686995744-f47e995ffe61?w=400'], brand: 'Pioneer', condition: 'Новий', color: 'Чорний', description: 'Сучасна магнітола з USB, AUX та FM-тюнером. Потужність 4x50W.', badge: 'hot' },
+  { id: 2, name: 'Компресор автомобільний 12V', category: 'Компресор', price: 899, old_price: 1299, images: ['https://images.unsplash.com/photo-1487754180451-c456f719a1fc?w=400'], brand: 'Vitol', condition: 'Новий', color: 'Чорний', description: 'Компактний компресор для шин. Тиск до 7 бар.', badge: 'sale' },
+  { id: 3, name: 'LED-фари денного світла Philips', category: 'Автомобільне світло', price: 1299, old_price: 1699, images: ['https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?w=400'], brand: 'Philips', condition: 'Новий', color: 'Білий', description: 'Яскраві LED-фари DRL. Довговічні діоди.', badge: 'hot' },
+  { id: 4, name: 'Автомобільний інвертор 2000W', category: 'Інвертори', price: 4599, old_price: 5999, images: ['https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400'], brand: 'Energizer', condition: 'Новий', color: 'Чорний', description: 'Перетворювач напруги 12V -> 220V. Чиста синусоїда.', badge: 'top' },
+  { id: 5, name: 'Відеореєстратор Xiaomi 70mai A500S', category: 'Відеореєстратори', price: 3299, old_price: 3999, images: ['https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=400'], brand: 'Xiaomi', condition: 'Новий', color: 'Чорний', description: '2K зйомка, GPS, ADAS, Wi-Fi. Подвійна камера.', badge: 'hot' },
+  { id: 6, name: 'FM-трансмітер Baseus Bluetooth', category: 'Трансмітери', price: 599, old_price: 899, images: ['https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400'], brand: 'Baseus', condition: 'Новий', color: 'Чорний', description: 'Bluetooth 5.0, швидка зарядка QC 3.0, гучний зв\u2019язок.', badge: 'sale' },
+  { id: 7, name: 'Пуско-зарядний пристрій 18000mAh', category: 'Пускозарядні', price: 2799, old_price: 3499, images: ['https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?w=400'], brand: 'CarJump', condition: 'Новий', color: 'Помаранчевий', description: 'Запуск двигуна до 6.0L бензин / 3.0L дизель.', badge: 'hot' },
+  { id: 8, name: 'Автомобільна зарядка Quick Charge 3.0', category: 'Автомобільний зарядний пристрій', price: 299, old_price: 499, images: ['https://images.unsplash.com/photo-1542362567-b07e54358753?w=400'], brand: 'Anker', condition: 'Новий', color: 'Чорний', description: 'Швидка зарядка для всіх пристроїв. 2xUSB порти.', badge: 'new' },
+];
 
 // ─── Animation Variants ─────────────────────────────────────
 const fadeInUp = {
