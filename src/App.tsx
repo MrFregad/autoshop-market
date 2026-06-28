@@ -44,6 +44,41 @@ interface CategoryItem {
   subtitle: string;
 }
 
+// ─── Image Fallbacks by Category ────────────────────────────
+const CATEGORY_FALLBACKS: Record<string, string> = {
+  'Інвертори':                      'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&auto=format&fit=crop&q=70',
+  'Автоакустика':                   'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=400&auto=format&fit=crop&q=70',
+  'Автомагнітоли':                  'https://images.unsplash.com/photo-1489686995744-f47e995ffe61?w=400&auto=format&fit=crop&q=70',
+  'Автомобільне світло':            'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?w=400&auto=format&fit=crop&q=70',
+  'Автомобільний зарядний пристрій':'https://images.unsplash.com/photo-1542362567-b07e54358753?w=400&auto=format&fit=crop&q=70',
+  'Аксесуари':                      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&auto=format&fit=crop&q=70',
+  'Автохімія':                      'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=400&auto=format&fit=crop&q=70',
+  'Відеореєстратори':               'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=400&auto=format&fit=crop&q=70',
+  'Компресор':                      'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?w=400&auto=format&fit=crop&q=70',
+  'Монітори та камери заднього виду':'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?w=400&auto=format&fit=crop&q=70',
+  'Навігатори':                     'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=400&auto=format&fit=crop&q=70',
+  'Перетворювачі':                  'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&auto=format&fit=crop&q=70',
+  'Пускозарядні':                   'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?w=400&auto=format&fit=crop&q=70',
+  'Трансмітери':                    'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&auto=format&fit=crop&q=70',
+  'Тримачі, розгалужувачі':         'https://images.unsplash.com/photo-1517026575980-3e1e2dedeab4?w=400&auto=format&fit=crop&q=70',
+};
+const DEFAULT_FALLBACK = 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=400&auto=format&fit=crop&q=70';
+
+// Returns a category-appropriate fallback image URL
+const getFallbackImage = (category?: string): string =>
+  (category && CATEGORY_FALLBACKS[category]) || DEFAULT_FALLBACK;
+
+// onError handler for <img> — swaps src to fallback once, prevents loop
+const imgError = (category?: string) => (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const img = e.currentTarget;
+  img.onerror = null;
+  img.src = getFallbackImage(category);
+};
+
+// Safe first image URL — returns fallback if array is empty/undefined
+const firstImg = (images: string[] | undefined, category?: string): string =>
+  images?.[0] || getFallbackImage(category);
+
 // ─── Constants ──────────────────────────────────────────────
 const TELEGRAM_BOT_TOKEN = '8790461264:AAGLzB3NrwghrfMgHvSt7D19H5d3MoNy_ew';
 const TELEGRAM_CHAT_ID = '7545602942';
@@ -350,7 +385,7 @@ const HotDeals = ({ products, onProductClick, onAddToCart }: { products: Product
                   className="min-w-[200px] max-w-[200px] bg-white rounded-xl overflow-hidden shadow-lg cursor-pointer snap-start"
                 >
                   <div className="relative aspect-square bg-slate-100">
-                    <img src={product.images[0]} alt="" className="w-full h-full object-cover" />
+                    <img src={firstImg(product.images, product.category)} alt="" className="w-full h-full object-cover" onError={imgError(product.category)} />
                     <div className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-black px-2 py-1 rounded-full flex items-center gap-1">
                       <Flame className="w-3 h-3" /> -{discount}%
                     </div>
@@ -882,7 +917,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                       <ProductBadge type={product.badge} />
 
                       <div className="aspect-square w-full overflow-hidden rounded-xl bg-slate-50 flex items-center justify-center relative">
-                        <img src={product.images[0]} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                        <img src={firstImg(product.images, product.category)} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" onError={imgError(product.category)} />
                         <motion.div
                           initial={{ opacity: 0 }}
                           whileHover={{ opacity: 1 }}
@@ -1025,7 +1060,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                     onClick={() => setSelectedReviewImage(img)}
                     className={`w-12 h-12 border-2 rounded-lg p-0.5 transition shrink-0 ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
                   >
-                    <img src={img} alt="" className="w-full h-full object-cover rounded-md" />
+                    <img src={img} alt="" className="w-full h-full object-cover rounded-md" onError={imgError(currentProduct.category)} />
                   </motion.button>
                 ))}
               </div>
@@ -1039,20 +1074,20 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                       onClick={() => setSelectedReviewImage(img)}
                       className={`w-14 h-14 border-2 rounded-xl p-0.5 transition ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
                     >
-                      <img src={img} alt="" className="w-full h-full object-cover rounded-lg" />
+                      <img src={img} alt="" className="w-full h-full object-cover rounded-lg" onError={imgError(currentProduct.category)} />
                     </motion.button>
                   ))}
                 </div>
                 <div className="flex-1 aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center max-h-[460px] relative">
                   {currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
                   <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />
-                  <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={selectedReviewImage || currentProduct.images[0]} alt="" className="w-full h-full object-contain" />
+                  <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={firstImg([selectedReviewImage].filter(Boolean), currentProduct.category) || firstImg(currentProduct.images, currentProduct.category)} alt="" className="w-full h-full object-contain" onError={imgError(currentProduct.category)} />
                 </div>
               </div>
               <div className="sm:hidden aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center relative">
                 {currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
                 <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />
-                <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={selectedReviewImage || currentProduct.images[0]} alt="" className="w-full h-full object-contain" />
+                <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={firstImg([selectedReviewImage].filter(Boolean), currentProduct.category) || firstImg(currentProduct.images, currentProduct.category)} alt="" className="w-full h-full object-contain" onError={imgError(currentProduct.category)} />
               </div>
             </div>
 
@@ -1177,7 +1212,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   <AnimatePresence>
                     {cart.map((item) => (
                       <motion.div key={item.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -100 }} className="flex gap-4 border-b pb-4">
-                        <img src={item.images[0]} alt="" className="h-16 w-16 rounded-xl object-cover shadow-sm" />
+                        <img src={firstImg(item.images, item.category)} alt="" className="h-16 w-16 rounded-xl object-cover shadow-sm" onError={imgError(item.category)} />
                         <div className="flex flex-1 flex-col justify-between">
                           <h4 className="text-xs font-medium text-slate-800 line-clamp-2">{item.name}</h4>
                           <div className="flex items-center justify-between mt-2">
