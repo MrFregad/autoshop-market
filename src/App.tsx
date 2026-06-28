@@ -85,22 +85,30 @@ const TELEGRAM_CHAT_ID = '7545602942';
 const ADMIN_PASSWORD = 'admin123';
 
 const categories: CategoryItem[] = [
-  { name: 'Усі', subtitle: 'Повний каталог автотоварів', image: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Інвертори', subtitle: 'Живлення в дорозі', image: 'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Автоакустика', subtitle: 'Звук для салону', image: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Автомагнітоли', subtitle: 'Мультимедіа та керування', image: 'https://images.unsplash.com/photo-1489686995744-f47e995ffe61?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Автомобільне світло', subtitle: 'Фари, LED та підсвітка', image: 'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Автомобільний зарядний пристрій', subtitle: 'Зарядка для гаджетів', image: 'https://dropt.in.ua/image/cache/catalog/products/56/56839_a6c67cfeb09b-228x228.png' },
-  { name: 'Аксесуари', subtitle: 'Корисні дрібниці для авто', image: 'https://images.unsplash.com/photo-1542362567-b07e54358753?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Автохімія', subtitle: 'Догляд, очищення та захист', image: 'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Відеореєстратори', subtitle: 'Запис поїздок і безпека', image: 'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Компресор', subtitle: 'Тиск у шинах під контролем', image: 'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Монітори та камери заднього виду', subtitle: 'Огляд і паркування', image: 'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Навігатори', subtitle: 'Маршрути без зайвих нервів', image: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Перетворювачі', subtitle: 'Стабільна напруга', image: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Пускозарядні', subtitle: 'Старт двигуна будь-коли', image: 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Трансмітери', subtitle: 'Bluetooth та FM-зв\u2019язок', image: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=420&auto=format&fit=crop&q=70' },
-  { name: 'Тримачі, розгалужувачі', subtitle: 'Зручність для кожної поїздки', image: 'https://images.unsplash.com/photo-1517026575980-3e1e2dedeab4?w=420&auto=format&fit=crop&q=70' },
+  { name: 'Усі', subtitle: '', image: '' },
+  { name: 'Універсальні аксесуари', subtitle: '', image: '' },
+  { name: 'Автолампи', subtitle: '', image: '' },
+  { name: 'Автохімія', subtitle: '', image: '' },
+  { name: 'Автосвітло', subtitle: '', image: '' },
+  { name: 'Аксесуари для авто в салон', subtitle: '', image: '' },
+  { name: 'Бризговики', subtitle: '', image: '' },
+  { name: 'Дефлектори', subtitle: '', image: '' },
+  { name: 'Багажники/дуги на дах', subtitle: '', image: '' },
+  { name: 'Запчастини кузова', subtitle: '', image: '' },
+  { name: 'Кенгурятники та підніжки', subtitle: '', image: '' },
+  { name: 'Килимки', subtitle: '', image: '' },
+  { name: 'Ковпаки', subtitle: '', image: '' },
+  { name: 'Обвіси', subtitle: '', image: '' },
+  { name: 'OffRoad аксесуари', subtitle: '', image: '' },
+  { name: 'Універсальні автоаксесуари', subtitle: '', image: '' },
+  { name: 'Хром накладки', subtitle: '', image: '' },
+  { name: 'Шильдики', subtitle: '', image: '' },
+  { name: 'Шумовіброізоляція', subtitle: '', image: '' },
+  { name: 'Електроніка', subtitle: '', image: '' },
+  { name: 'Захист днища', subtitle: '', image: '' },
+  { name: 'Чохли', subtitle: '', image: '' },
+  { name: 'Листовий пластик (для тюнінгу)', subtitle: '', image: '' },
+  { name: 'Автомобільні диски', subtitle: '', image: '' },
 ];
 
 const oversizedCategories = [
@@ -836,36 +844,23 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </div>
                 <p className="max-w-md text-xs text-slate-500">Обери розділ, щоб швидко знайти потрібні товари.</p>
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
-                {categories.map((cat, i) => {
+              <div className="flex flex-wrap gap-1.5">
+                {categories.map((cat) => {
                   const isActive = selectedCategory === cat.name;
                   return (
-                    <motion.div
+                    <motion.button
                       key={cat.name}
-                      custom={i}
-                      initial="hidden"
-                      animate="visible"
-                      variants={fadeInUp}
-                      whileHover={{ y: -3 }}
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.96 }}
                       onClick={() => setSelectedCategory(cat.name)}
-                      className={`group relative h-24 w-[150px] sm:h-32 sm:w-[210px] shrink-0 overflow-hidden rounded-xl border shadow-sm transition-all cursor-pointer ${
-                        isActive ? 'border-purple-600 ring-2 ring-purple-200' : 'border-slate-200'
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
+                        isActive
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-md'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-purple-400 hover:text-purple-700'
                       }`}
                     >
-                      <img src={cat.image} alt="" className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/40 to-transparent" />
-                      <div className="absolute inset-x-0 bottom-0 p-2 sm:p-3 text-white">
-                        <div className="flex items-start justify-between gap-1">
-                          <div>
-                            <span className="block text-xs sm:text-sm font-black leading-tight">{cat.name}</span>
-                            <span className="mt-0.5 hidden sm:block text-[11px] font-medium text-white/70">{cat.subtitle}</span>
-                          </div>
-                          {isActive && (
-                            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} className="rounded-full bg-purple-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-lg shrink-0">✓</motion.span>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
+                      {cat.name}
+                    </motion.button>
                   );
                 })}
               </div>
@@ -873,15 +868,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           </div>
 
           <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
-            {/* Hot Deals + Info Tabs side by side */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-2">
-              <div className="lg:col-span-4">
-                <InfoTabs />
-              </div>
-              <div className="lg:col-span-8">
-                <HotDeals products={products} onProductClick={setActiveProductId} onAddToCart={addToCart} />
-              </div>
-            </div>
+            {/* Info Tabs */}
+            <InfoTabs />
 
             {/* Products Grid */}
             {filteredProducts.length === 0 ? (
