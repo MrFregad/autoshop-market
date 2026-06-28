@@ -93,3 +93,23 @@ html {
   background: rgba(124, 58, 237, 0.2);
   color: inherit;
 }
+
+/* Prevent iOS from zooming in on input focus (requires font-size >= 16px) */
+@media screen and (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* Safe-area helpers for notched/pill phones */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.bottom-safe {
+  bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Prevent horizontal overflow globally */
+body {
+  overflow-x: hidden;
+}

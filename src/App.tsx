@@ -704,7 +704,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             initial={{ opacity: 0, y: 50, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: 50, x: '-50%' }}
-            className="fixed bottom-6 left-1/2 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-sm font-semibold"
+            className="fixed bottom-20 sm:bottom-6 left-1/2 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 text-sm font-semibold"
           >
             <div className="bg-green-500 rounded-full p-0.5"><Plus className="h-3 w-3 text-white" /></div>
             Товар додано в кошик!
@@ -907,7 +907,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                           <motion.button
                             whileTap={{ scale: 0.95 }}
                             onClick={(e) => { e.stopPropagation(); addToCart(product); }}
-                            className="mt-2 w-full bg-purple-600 text-white py-1.5 rounded-lg text-[11px] font-bold hover:bg-purple-700 transition flex items-center justify-center gap-1"
+                            className="mt-2 w-full bg-purple-600 text-white py-2 rounded-lg text-[11px] font-bold hover:bg-purple-700 transition flex items-center justify-center gap-1 min-h-[36px]"
                           >
                             <ShoppingCart className="w-3 h-3" /> Купити
                           </motion.button>
@@ -920,39 +920,54 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             )}
 
             {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-8">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 rounded-lg border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+            {totalPages > 1 && (() => {
+              const getPages = () => {
+                if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
+                const pages: (number | '...')[] = [];
+                const addPage = (p: number) => { if (!pages.includes(p)) pages.push(p); };
+                addPage(1);
+                if (currentPage > 3) pages.push('...');
+                for (let p = Math.max(2, currentPage - 1); p <= Math.min(totalPages - 1, currentPage + 1); p++) addPage(p);
+                if (currentPage < totalPages - 2) pages.push('...');
+                addPage(totalPages);
+                return pages;
+              };
+              return (
+                <div className="flex items-center justify-center gap-1.5 mt-8 flex-wrap">
                   <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`w-9 h-9 rounded-lg text-xs font-bold transition ${
-                      currentPage === page
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white border text-slate-600 hover:bg-slate-50'
-                    }`}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition min-w-[36px] min-h-[36px] flex items-center justify-center"
                   >
-                    {page}
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
-                ))}
-
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="p-2 rounded-lg border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            )}
+                  {getPages().map((page, i) =>
+                    page === '...'
+                      ? <span key={`ellipsis-${i}`} className="w-8 text-center text-slate-400 text-xs">…</span>
+                      : (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page as number)}
+                          className={`w-9 h-9 rounded-lg text-xs font-bold transition ${
+                            currentPage === page
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-white border text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      )
+                  )}
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition min-w-[36px] min-h-[36px] flex items-center justify-center"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* Trust badges */}
             <motion.section initial="hidden" whileInView="visible" variants={fadeIn} className="mt-10">
@@ -1167,9 +1182,9 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                           <h4 className="text-xs font-medium text-slate-800 line-clamp-2">{item.name}</h4>
                           <div className="flex items-center justify-between mt-2">
                             <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, -1)} className="px-2 py-1 hover:bg-white rounded-md transition"><Minus className="h-3 w-3" /></motion.button>
+                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, -1)} className="min-w-[36px] min-h-[36px] flex items-center justify-center px-2 py-1.5 hover:bg-white rounded-md transition"><Minus className="h-3 w-3" /></motion.button>
                               <span className="text-xs font-bold w-5 text-center">{item.quantity}</span>
-                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, 1)} className="px-2 py-1 hover:bg-white rounded-md transition"><Plus className="h-3 w-3" /></motion.button>
+                              <motion.button whileTap={{ scale: 0.9 }} onClick={() => updateQuantity(item.id, 1)} className="min-w-[36px] min-h-[36px] flex items-center justify-center px-2 py-1.5 hover:bg-white rounded-md transition"><Plus className="h-3 w-3" /></motion.button>
                             </div>
                             <span className="text-sm font-black text-slate-900">{item.price * item.quantity} ₴</span>
                           </div>
@@ -1180,7 +1195,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 )}
               </div>
               {cart.length > 0 && (
-                <div className="border-t p-6 space-y-3 bg-slate-50">
+                <div className="border-t p-6 pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] space-y-3 bg-slate-50">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-500">Разом:</span>
                     <span className="text-xl font-black text-slate-900">{cartTotal} ₴</span>
@@ -1200,7 +1215,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         {isCheckoutOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
             <div className="absolute inset-0" onClick={() => !isSendingOrder && setIsCheckoutOpen(false)} />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 max-h-[90dvh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-base font-bold">Оформлення замовлення</h2>
                 <button onClick={() => setIsCheckoutOpen(false)} className="text-slate-400 hover:text-slate-600 p-1"><X className="h-5 w-5" /></button>
