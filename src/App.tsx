@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, ShoppingCart, X, Plus, Minus,
@@ -338,93 +338,6 @@ const InfoTabs = () => {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-      </div>
-    </motion.section>
-  );
-};
-
-// ─── Hot Deals Section ──────────────────────────────────────
-const HotDeals = ({ products, onProductClick, onAddToCart }: { products: Product[]; onProductClick: (id: number) => void; onAddToCart: (p: Product) => void }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const hotProducts = products.filter(p => p.old_price && p.old_price > p.price).slice(0, 10);
-
-  if (hotProducts.length === 0) return null;
-
-  const scroll = (dir: number) => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollBy({ left: dir * 280, behavior: 'smooth' });
-    }
-  };
-
-  return (
-    <motion.section initial="hidden" animate="visible" variants={fadeInUp} className="mb-6">
-      <div className="bg-gradient-to-r from-red-600 via-orange-500 to-red-600 rounded-2xl p-4 shadow-lg relative overflow-hidden">
-        {/* Animated background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,.1) 10px, rgba(255,255,255,.1) 20px)' }} />
-        </div>
-
-        <div className="relative z-10">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <motion.div animate={{ rotate: [0, 10, -10, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}>
-                <Flame className="h-6 w-6 text-yellow-300" />
-              </motion.div>
-              <div>
-                <h2 className="text-lg font-black text-white">Гарячі пропозиції</h2>
-                <p className="text-[11px] text-white/80">Обмежена кількість за суперціною!</p>
-              </div>
-            </div>
-            <div className="flex gap-1">
-              <button onClick={() => scroll(-1)} className="p-1.5 rounded-full bg-white/20 text-white hover:bg-white/30 transition"><ChevronLeft className="h-4 w-4" /></button>
-              <button onClick={() => scroll(1)} className="p-1.5 rounded-full bg-white/20 text-white hover:bg-white/30 transition"><ChevronRight className="h-4 w-4" /></button>
-            </div>
-          </div>
-
-          <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
-            {hotProducts.map((product) => {
-              const discount = product.old_price ? Math.round(((product.old_price - product.price) / product.old_price) * 100) : 0;
-              return (
-                <motion.div
-                  key={product.id}
-                  whileHover={{ y: -4, scale: 1.02 }}
-                  onClick={() => onProductClick(product.id)}
-                  className="min-w-[200px] max-w-[200px] bg-white rounded-xl overflow-hidden shadow-lg cursor-pointer snap-start"
-                >
-                  <div className="relative aspect-square bg-slate-100">
-                    <img src={firstImg(product.images, product.category)} alt="" className="w-full h-full object-cover" onError={imgError(product.category)} />
-                    <div className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-black px-2 py-1 rounded-full flex items-center gap-1">
-                      <Flame className="w-3 h-3" /> -{discount}%
-                    </div>
-                    {product.badge === 'hot' && (
-                      <motion.div
-                        className="absolute bottom-2 right-2 bg-orange-500 text-white text-[9px] font-black px-2 py-1 rounded-full"
-                        animate={{ scale: [1, 1.1, 1] }}
-                        transition={{ repeat: Infinity, duration: 1.5 }}
-                      >
-                        🔥 ТОП
-                      </motion.div>
-                    )}
-                  </div>
-                  <div className="p-3">
-                    <h4 className="text-xs font-bold text-slate-800 line-clamp-2 min-h-[32px]">{product.name}</h4>
-                    <div className="flex items-end gap-2 mt-2">
-                      <span className="text-sm font-black text-red-600">{product.price} ₴</span>
-                      <span className="text-[10px] text-slate-400 line-through">{product.old_price} ₴</span>
-                    </div>
-                    <motion.button
-                      whileTap={{ scale: 0.95 }}
-                      onClick={(e) => { e.stopPropagation(); onAddToCart(product); }}
-                      className="mt-2 w-full bg-red-500 text-white py-1.5 rounded-lg text-[11px] font-bold hover:bg-red-600 transition flex items-center justify-center gap-1"
-                    >
-                      <ShoppingCart className="w-3 h-3" /> Купити
-                    </motion.button>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
         </div>
       </div>
     </motion.section>
