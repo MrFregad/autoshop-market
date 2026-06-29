@@ -32,7 +32,7 @@ export function useProductStructuredData(product: Product | null) {
       "category": product.category,
       "offers": {
         "@type": "Offer",
-        "url": `https://autoshop-market.vercel.app/#product-${product.id}`,
+        "url": `https://autoshop-market.vercel.app/product/${product.id}`,
         "priceCurrency": "UAH",
         "price": product.price,
         "availability": "https://schema.org/InStock",

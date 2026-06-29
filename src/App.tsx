@@ -6,8 +6,9 @@ import {
   Phone, Mail, Clock, Truck, CreditCard, AlertTriangle,
   PackageCheck, MapPin, Flame, ChevronRight, ChevronLeft,
   Zap, Shield, Headphones, Percent, Tag,
-  TruckIcon, Wallet, FileText, MessageCircle
+  TruckIcon, Wallet, FileText, MessageCircle, Link2, Check
 } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router';
 import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
 
@@ -371,7 +372,15 @@ export default function App() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [activeProductId, setActiveProductId] = useState<number | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  // id товара берём из URL: /product/123 — у каждого товара своя ссылка для реклами
+  const productMatch = location.pathname.match(/^\/product\/(\d+)/);
+  const activeProductId = productMatch ? Number(productMatch[1]) : null;
+  const setActiveProductId = (id: number | null) => {
+    navigate(id == null ? '/' : `/product/${id}`);
+  };
+  const [linkCopied, setLinkCopied] = useState(false);
 
 // Structured data для открытого товара
 const activeProduct = products.find(p => p.id === activeProductId) || 
@@ -460,6 +469,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       }
     }
   }, [activeProductId, products]);
+
+  // Прокрутка вверх при смене товара (в т.ч. при заходе по прямой ссылке)
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeProductId]);
 
   // ─── Cart Logic ───────────────────────────────────────────
   const addToCart = (product: Product) => {
@@ -1126,14 +1140,31 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   {currentProduct.condition && <div className="flex justify-between text-xs"><span className="text-slate-500">Стан</span><span className="font-bold text-emerald-600">{currentProduct.condition}</span></div>}
                 </div>
               </div>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => addToCart(currentProduct)}
-                className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2"
-              >
-                <ShoppingCart className="h-5 w-5" /> Додати в кошик
-              </motion.button>
+              <div className="mt-2 space-y-2">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => addToCart(currentProduct)}
+                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2"
+                >
+                  <ShoppingCart className="h-5 w-5" /> Додати в кошик
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    const url = `${window.location.origin}/product/${currentProduct.id}`;
+                    navigator.clipboard?.writeText(url).then(() => {
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 1800);
+                    });
+                  }}
+                  className="w-full bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-semibold text-sm hover:bg-purple-50 transition flex items-center justify-center gap-2"
+                >
+                  {linkCopied
+                    ? <><Check className="h-4 w-4 text-emerald-600" /> Посилання скопійовано!</>
+                    : <><Link2 className="h-4 w-4" /> Скопіювати посилання на товар</>}
+                </motion.button>
+              </div>
             </div>
           </motion.div>
 
