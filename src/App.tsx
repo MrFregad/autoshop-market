@@ -366,6 +366,88 @@ const PromoBanner = () => (
   </motion.div>
 );
 
+// ─── Hero (главная) ─────────────────────────────────────────
+const Hero = ({ onBrowse }: { onBrowse: () => void }) => (
+  <section className="relative overflow-hidden bg-gradient-to-br from-purple-700 via-violet-700 to-purple-900 text-white">
+    {/* Декоративные пятна */}
+    <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-orange-500/25 blur-3xl" />
+    <div className="pointer-events-none absolute -bottom-28 -left-28 h-80 w-80 rounded-full bg-fuchsia-500/20 blur-3xl" />
+    <div
+      className="pointer-events-none absolute inset-0 opacity-[0.07]"
+      style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize: '22px 22px' }}
+    />
+
+    <div className="relative mx-auto max-w-7xl px-4 py-12 sm:py-16 lg:py-20 grid lg:grid-cols-2 gap-10 items-center">
+      <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3 py-1 text-xs font-semibold backdrop-blur">
+          <Zap className="h-3.5 w-3.5 text-yellow-300" /> Понад 14 000 товарів у каталозі
+        </span>
+        <h1 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-black leading-[1.1] tracking-tight">
+          Автоаксесуари і тюнінг <span className="text-orange-400">під твоє авто</span>
+        </h1>
+        <p className="mt-4 max-w-xl text-sm sm:text-base text-purple-100 leading-relaxed">
+          Модельний підбір за маркою, поколінням і кузовом. Дефлектори, килимки, багажники, обвіси,
+          тюнінг-оптика та все для комфорту, захисту й стайлінгу.
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={onBrowse}
+            className="bg-white text-purple-700 px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-purple-50 transition flex items-center gap-2"
+          >
+            <Search className="h-4 w-4" /> Обрати категорію
+          </motion.button>
+          <a
+            href="tel:0976020714"
+            className="bg-white/10 border border-white/25 px-6 py-3 rounded-xl font-bold text-sm hover:bg-white/20 transition flex items-center gap-2 backdrop-blur"
+          >
+            <Phone className="h-4 w-4" /> 097-602-0714
+          </a>
+        </div>
+        <div className="mt-8 grid grid-cols-3 gap-4 max-w-md">
+          {[
+            { n: '14 000+', l: 'товарів' },
+            { n: '24', l: 'категорії' },
+            { n: '1-3 дні', l: 'доставка' },
+          ].map((s) => (
+            <div key={s.l}>
+              <div className="text-xl sm:text-2xl font-black">{s.n}</div>
+              <div className="text-[11px] text-purple-200 uppercase tracking-wide">{s.l}</div>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.6, delay: 0.1 }}
+        className="hidden lg:flex justify-center"
+      >
+        <div className="grid grid-cols-2 gap-4">
+          {[
+            { icon: <Truck className="h-7 w-7" />, t: 'Швидка доставка', d: '1-3 дні по Україні' },
+            { icon: <Shield className="h-7 w-7" />, t: 'Гарантія якості', d: 'Перевірені товари' },
+            { icon: <Headphones className="h-7 w-7" />, t: 'Підтримка 24/7', d: 'Завжди на зв’язку' },
+            { icon: <Percent className="h-7 w-7" />, t: 'Знижки до 40%', d: 'Акції щотижня' },
+          ].map((c, i) => (
+            <motion.div
+              key={i}
+              whileHover={{ y: -6 }}
+              className="bg-white/10 border border-white/20 rounded-2xl p-5 backdrop-blur w-44"
+            >
+              <div className="text-orange-300">{c.icon}</div>
+              <div className="mt-3 text-sm font-bold">{c.t}</div>
+              <div className="text-[11px] text-purple-200 mt-0.5">{c.d}</div>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
+    </div>
+  </section>
+);
+
 // ─── Main App ───────────────────────────────────────────────
 export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -770,7 +852,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       </AnimatePresence>
 
       {/* Main Content */}
-      {isLoading ? (
+      {/* Полноэкранный спиннер только при прямом заходе по ссылке товара, пока грузится база */}
+      {isLoading && productMatch ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
             <Zap className="h-8 w-8 text-purple-600" />
@@ -779,8 +862,13 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         </div>
       ) : !currentProduct ? (
         <>
+          {/* Hero — только на главной */}
+          {!showProducts && (
+            <Hero onBrowse={() => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+          )}
+
           {/* Categories */}
-          <div className="bg-white border-b shadow-sm">
+          <div id="categories" className="bg-white border-b shadow-sm scroll-mt-20">
             <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-5">
               <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -814,7 +902,14 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
           <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
             {/* Products Grid */}
-            {showProducts && (filteredProducts.length === 0 ? (
+            {showProducts && (isLoading ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
+                  <Zap className="h-8 w-8 text-purple-600" />
+                </motion.div>
+                <p className="text-sm font-semibold text-slate-500">Завантаження товарів...</p>
+              </div>
+            ) : filteredProducts.length === 0 ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
                 <PackageCheck className="h-12 w-12 text-slate-300 mx-auto mb-3" />
                 <p className="text-sm font-semibold text-slate-500">Товарів не знайдено</p>
