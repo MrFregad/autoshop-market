@@ -585,12 +585,18 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     }
   };
 
+  // Товары-заглушки «Замовити будь-який товар…» (под заказ) — двигаем в конец категории
+  const isPlaceholder = (p: Product) =>
+    p.name.trim().toLowerCase().startsWith('замовити будь-який товар');
+
   const filteredProducts = useMemo(() => {
-    return products.filter(product => {
+    const list = products.filter(product => {
       const matchesCategory = selectedCategory === 'Усі' || product.category === selectedCategory;
       if (searchQuery === ADMIN_PASSWORD) return matchesCategory;
       return matchesCategory && product.name.toLowerCase().includes(searchQuery.toLowerCase());
     });
+    // Стабильная сортировка: обычные товары сохраняют порядок, заглушки — в конце
+    return [...list].sort((a, b) => Number(isPlaceholder(a)) - Number(isPlaceholder(b)));
   }, [products, searchQuery, selectedCategory]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
