@@ -620,7 +620,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm backdrop-blur-md bg-white/95">
         <div className="mx-auto max-w-7xl px-3 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4 sm:py-3">
           <div className="flex items-center justify-between gap-3">
-            <motion.div onClick={() => setActiveProductId(null)} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
+            <motion.div onClick={() => { setActiveProductId(null); setSelectedCategory('Усі'); setSearchQuery(''); }} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
               AUTO<span className="text-orange-500">SHOP</span>
             </motion.div>
             <div className="flex items-center gap-2 sm:hidden shrink-0">
@@ -776,7 +776,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 <p className="max-w-md text-xs text-slate-500">Обери розділ, щоб швидко знайти потрібні товари.</p>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {categories.map((cat) => {
+                {categories.filter(c => c.name !== 'Усі').map((cat) => {
                   const isActive = selectedCategory === cat.name;
                   return (
                     <motion.button
@@ -799,9 +799,6 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           </div>
 
           <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
-            {/* Info Tabs */}
-            <InfoTabs />
-
             {/* Products Grid */}
             {showProducts && (filteredProducts.length === 0 ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
@@ -1023,6 +1020,9 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               </div>
             </motion.section>
             )}
+
+            {/* Info Tabs — внизу, під текстом опису */}
+            <InfoTabs />
 
             {/* Footer */}
             <footer className="mt-10 border-t pt-6 pb-8 text-center">
