@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "sitemap": "node scripts/generate-sitemap.mjs",
     "youtube:ideas": "node scripts/youtubeMarketingBot.mjs ideas",
     "youtube:metadata": "node scripts/youtubeMarketingBot.mjs metadata",
     "youtube:video": "node scripts/youtubeMarketingBot.mjs video",
