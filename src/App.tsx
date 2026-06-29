@@ -423,9 +423,23 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
   const fetchProducts = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase.from('products').select('*').order('id', { ascending: false });
-    if (!error && data && data.length > 0) {
-      setProducts(data);
+    // Supabase возвращает максимум 1000 строк за запрос — тянем все товары пачками через .range()
+    const BATCH = 1000;
+    const all: Product[] = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .order('id', { ascending: false })
+        .range(from, from + BATCH - 1);
+      if (error || !data) break;
+      all.push(...(data as Product[]));
+      if (data.length < BATCH) break;
+      from += BATCH;
+    }
+    if (all.length > 0) {
+      setProducts(all);
     } else {
       // Use sample data if empty
       setProducts(sampleProducts);
@@ -494,6 +508,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedCategory, searchQuery]);
+
+  // Показывать товары только когда выбрана категория, идёт поиск или включена админка.
+  // На главной (категория «Усі», без поиска) вместо сетки товарів показываем опис магазину.
+  const showProducts = isAdminMode || selectedCategory !== 'Усі' || searchQuery.trim() !== '';
 
   const currentProduct = useMemo(() => products.find(p => p.id === activeProductId) || null, [activeProductId, products]);
   const currentProductReviews = useMemo(() => reviews.filter(r => r.product_id === activeProductId), [reviews, activeProductId]);
@@ -785,7 +803,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             <InfoTabs />
 
             {/* Products Grid */}
-            {filteredProducts.length === 0 ? (
+            {showProducts && (filteredProducts.length === 0 ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
                 <PackageCheck className="h-12 w-12 text-slate-300 mx-auto mb-3" />
                 <p className="text-sm font-semibold text-slate-500">Товарів не знайдено</p>
@@ -853,10 +871,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   ))}
                 </AnimatePresence>
               </motion.div>
-            )}
+            ))}
 
             {/* Pagination */}
-            {totalPages > 1 && (() => {
+            {showProducts && totalPages > 1 && (() => {
               const getPages = () => {
                 if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
                 const pages: (number | '...')[] = [];
@@ -925,7 +943,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               </div>
             </motion.section>
 
-            {/* SEO Text Block */}
+            {/* SEO Text Block — показываем только на главной */}
+            {!showProducts && (
             <motion.section initial="hidden" whileInView="visible" variants={fadeIn} className="mt-10">
               <div className="bg-white border rounded-2xl p-6 sm:p-8 space-y-6 text-sm text-slate-600 leading-relaxed">
 
@@ -1003,6 +1022,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
               </div>
             </motion.section>
+            )}
 
             {/* Footer */}
             <footer className="mt-10 border-t pt-6 pb-8 text-center">
