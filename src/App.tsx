@@ -471,7 +471,7 @@ const activeProduct = products.find(p => p.id === activeProductId) ||
 useProductStructuredData(activeProduct);
 
 const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
-  activeProduct?.images[0] || ''
+  activeProduct?.images?.[0] || ''
 );
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Усі');
@@ -546,7 +546,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   useEffect(() => {
     if (activeProductId) {
       const current = products.find(p => p.id === activeProductId);
-      if (current && current.images.length > 0) {
+      if (current && current.images && current.images.length > 0) {
         setSelectedReviewImage(current.images[0]);
       }
     }
@@ -678,10 +678,14 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const handleAddReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!revAuthor || !revText) { alert('Введіть ім\u2019я та текст відгуку!'); return; }
-    await supabase.from('reviews').insert([{
+    const { error } = await supabase.from('reviews').insert([{
       product_id: activeProductId, author: revAuthor, rating: revRating,
       text: revText, date: new Date().toLocaleDateString('uk-UA'),
     }]);
+    if (error) {
+      alert('Не вдалося опублікувати відгук: ' + error.message);
+      return;
+    }
     setRevAuthor(''); setRevText('');
     fetchReviews();
   };
@@ -1168,7 +1172,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 bg-white border rounded-2xl p-3 sm:p-6 shadow-sm">
             <div className="lg:col-span-7 flex flex-col gap-3">
               <div className="flex gap-2 overflow-x-auto shrink-0 sm:hidden">
-                {currentProduct.images.map((img, index) => (
+                {(currentProduct.images || []).map((img, index) => (
                   <motion.button
                     key={index}
                     whileTap={{ scale: 0.95 }}
@@ -1181,7 +1185,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               </div>
               <div className="hidden sm:flex gap-3">
                 <div className="flex flex-col gap-2 shrink-0">
-                  {currentProduct.images.map((img, index) => (
+                  {(currentProduct.images || []).map((img, index) => (
                     <motion.button
                       key={index}
                       whileHover={{ scale: 1.05 }}
