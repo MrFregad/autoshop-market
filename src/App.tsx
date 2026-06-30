@@ -429,7 +429,7 @@ const Hero = ({ onBrowse }: { onBrowse: () => void }) => (
         </div>
         <div className="mt-8 grid grid-cols-3 gap-4 max-w-md">
           {[
-            { n: '14 000+', l: 'товарів' },
+            { n: '65 000+', l: 'товарів' },
             { n: '24', l: 'категорії' },
             { n: '1-3 дні', l: 'доставка' },
           ].map((s) => (
