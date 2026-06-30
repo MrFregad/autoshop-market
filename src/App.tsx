@@ -111,7 +111,27 @@ const categories: CategoryItem[] = [
   { name: 'Чохли', subtitle: '', image: '' },
   { name: 'Листовий пластик (для тюнінгу)', subtitle: '', image: '' },
   { name: 'Автомобільні диски', subtitle: '', image: '' },
+  // Автохімія підкатегорії (Koch Chemie)
+  { name: 'Мийка авто', subtitle: '', image: '' },
+  { name: "Екстер'єр", subtitle: '', image: '' },
+  { name: "Інтер'єр", subtitle: '', image: '' },
+  { name: 'COLOURLOCK', subtitle: '', image: '' },
+  { name: 'Скло', subtitle: '', image: '' },
+  { name: 'NANO-захист', subtitle: '', image: '' },
+  { name: 'Консерванти', subtitle: '', image: '' },
+  { name: 'Поліювання', subtitle: '', image: '' },
+  { name: 'Обладнання (хімія)', subtitle: '', image: '' },
+  { name: 'Аксесуари (хімія)', subtitle: '', image: '' },
+  { name: 'Аромосаше', subtitle: '', image: '' },
+  { name: 'Набори (хімія)', subtitle: '', image: '' },
+  { name: 'Брендована продукція', subtitle: '', image: '' },
 ];
+
+const chemistrySubcategoryNames = new Set([
+  'Мийка авто', "Екстер'єр", "Інтер'єр", 'COLOURLOCK', 'Скло',
+  'NANO-захист', 'Консерванти', 'Поліювання', 'Обладнання (хімія)',
+  'Аксесуари (хімія)', 'Аромосаше', 'Набори (хімія)', 'Брендована продукція',
+]);
 
 const oversizedCategories = [
   'Дитячі автокрісла', 'Лебідки електричні', 'Автомобільні акумулятори', 'Вантажні акумулятори',
@@ -889,7 +909,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 <p className="max-w-md text-xs text-slate-500">Обери розділ, щоб швидко знайти потрібні товари.</p>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {categories.filter(c => c.name !== 'Усі').map((cat) => {
+                {categories.filter(c => c.name !== 'Усі' && !chemistrySubcategoryNames.has(c.name)).map((cat) => {
                   const isActive = selectedCategory === cat.name;
                   return (
                     <motion.button
@@ -907,6 +927,34 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                     </motion.button>
                   );
                 })}
+              </div>
+
+              {/* Автохімія підкатегорії */}
+              <div className="mt-5 pt-5 border-t border-slate-100">
+                <div className="mb-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-600">Автохімія</p>
+                  <h3 className="text-base font-black text-slate-950">Підкатегорії автохімії</h3>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {categories.filter(c => chemistrySubcategoryNames.has(c.name)).map((cat) => {
+                    const isActive = selectedCategory === cat.name;
+                    return (
+                      <motion.button
+                        key={cat.name}
+                        whileHover={{ scale: 1.04 }}
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => setSelectedCategory(cat.name)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
+                          isActive
+                            ? 'bg-purple-600 text-white border-purple-600 shadow-md'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-purple-400 hover:text-purple-700'
+                        }`}
+                      >
+                        {cat.name}
+                      </motion.button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
