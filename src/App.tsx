@@ -90,7 +90,6 @@ const categories: CategoryItem[] = [
   { name: 'Усі', subtitle: '', image: '' },
   { name: 'Універсальні аксесуари', subtitle: '', image: '' },
   { name: 'Автолампи', subtitle: '', image: '' },
-  { name: 'Автохімія', subtitle: '', image: '' },
   { name: 'Автосвітло', subtitle: '', image: '' },
   { name: 'Аксесуари для авто в салон', subtitle: '', image: '' },
   { name: 'Бризговики', subtitle: '', image: '' },
@@ -904,7 +903,6 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-600">Підбір за напрямком</p>
-                  <h2 className="text-xl font-black text-slate-950">Категорії для твого авто</h2>
                 </div>
                 <p className="max-w-md text-xs text-slate-500">Обери розділ, щоб швидко знайти потрібні товари.</p>
               </div>
