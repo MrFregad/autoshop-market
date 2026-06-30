@@ -933,7 +933,6 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               <div className="mt-5 pt-5 border-t border-slate-100">
                 <div className="mb-3">
                   <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-600">Автохімія</p>
-                  <h3 className="text-base font-black text-slate-950">Підкатегорії автохімії</h3>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {categories.filter(c => chemistrySubcategoryNames.has(c.name)).map((cat) => {
