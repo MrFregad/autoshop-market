@@ -9,6 +9,7 @@ import {
   TruckIcon, Wallet, FileText, MessageCircle, Link2, Check
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router';
+import { Analytics } from '@vercel/analytics/react';
 import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
 
@@ -1424,6 +1425,9 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Vercel Web Analytics */}
+      <Analytics />
     </div>
   );
 }
