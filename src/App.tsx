@@ -12,12 +12,14 @@ import { useNavigate, useLocation } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
+import { catalogTree } from './catalogTree';
 
 // ─── Types ──────────────────────────────────────────────────
 interface Product {
   id: number;
   name: string;
   category: string;
+  subcategory?: string;
   price: number;
   old_price?: number;
   images: string[];
@@ -471,6 +473,7 @@ const Hero = ({ onBrowse }: { onBrowse: () => void }) => (
 // ─── Main App ───────────────────────────────────────────────
 export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [directProduct, setDirectProduct] = useState<Product | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -485,8 +488,9 @@ export default function App() {
   const [linkCopied, setLinkCopied] = useState(false);
 
 // Structured data для открытого товара
-const activeProduct = products.find(p => p.id === activeProductId) || 
-                      sampleProducts.find(p => p.id === activeProductId) || 
+const activeProduct = products.find(p => p.id === activeProductId) ||
+                      (directProduct?.id === activeProductId ? directProduct : null) ||
+                      sampleProducts.find(p => p.id === activeProductId) ||
                       null;
 useProductStructuredData(activeProduct);
 
@@ -495,6 +499,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 );
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Усі');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const PRODUCTS_PER_PAGE = 18;
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -528,35 +534,45 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
   // ─── Data Loading ─────────────────────────────────────────
   useEffect(() => {
-    fetchProducts();
     fetchReviews();
   }, []);
 
+  // Признак «есть активный фильтр» — показываем товары (а не главную)
+  const isSearching = searchQuery.trim() !== '' && searchQuery.trim() !== ADMIN_PASSWORD;
+  const hasFilter = isAdminMode || selectedCategory !== 'Усі' || isSearching;
+
+  // Серверная пагинация: грузим только текущую страницу выбранного фильтра.
+  // Каталог большой (десятки тысяч товаров) — грузить всё в браузер нельзя.
   const fetchProducts = async () => {
     setIsLoading(true);
-    // Supabase возвращает максимум 1000 строк за запрос — тянем все товары пачками через .range()
-    const BATCH = 1000;
-    const all: Product[] = [];
-    let from = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('id', { ascending: false })
-        .range(from, from + BATCH - 1);
-      if (error || !data) break;
-      all.push(...(data as Product[]));
-      if (data.length < BATCH) break;
-      from += BATCH;
-    }
-    if (all.length > 0) {
-      setProducts(all);
+    const start = (currentPage - 1) * PRODUCTS_PER_PAGE;
+    let query = supabase.from('products').select('*', { count: 'exact' });
+    if (isSearching) {
+      query = query.ilike('name', `%${searchQuery.trim()}%`);
     } else {
-      // Use sample data if empty
-      setProducts(sampleProducts);
+      if (selectedCategory !== 'Усі') query = query.eq('category', selectedCategory);
+      if (selectedSubcategory) query = query.eq('subcategory', selectedSubcategory);
+    }
+    const { data, count, error } = await query
+      .order('id', { ascending: false })
+      .range(start, start + PRODUCTS_PER_PAGE - 1);
+    if (!error && data) {
+      setProducts(data as Product[]);
+      setTotalCount(count ?? data.length);
+    } else {
+      setProducts([]);
+      setTotalCount(0);
     }
     setIsLoading(false);
   };
+
+  // Перезагружаем при смене фильтра/страницы (поиск — с дебаунсом).
+  useEffect(() => {
+    if (!hasFilter) { setProducts([]); setTotalCount(0); setIsLoading(false); return; }
+    const t = setTimeout(fetchProducts, isSearching ? 350 : 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, selectedSubcategory, searchQuery, currentPage, isAdminMode]);
 
   const fetchReviews = async () => {
     const { data, error } = await supabase.from('reviews').select('*');
@@ -605,37 +621,42 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     }
   };
 
-  // Товары-заглушки «Замовити будь-який товар…» (под заказ) — двигаем в конец категории
-  const isPlaceholder = (p: Product) =>
-    p.name.trim().toLowerCase().startsWith('замовити будь-який товар');
+  // Товары приходят уже отфильтрованными и постранично с сервера.
+  const paginatedProducts = products;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PRODUCTS_PER_PAGE));
 
-  const filteredProducts = useMemo(() => {
-    const list = products.filter(product => {
-      const matchesCategory = selectedCategory === 'Усі' || product.category === selectedCategory;
-      if (searchQuery === ADMIN_PASSWORD) return matchesCategory;
-      return matchesCategory && product.name.toLowerCase().includes(searchQuery.toLowerCase());
-    });
-    // Стабильная сортировка: обычные товары сохраняют порядок, заглушки — в конце
-    return [...list].sort((a, b) => Number(isPlaceholder(a)) - Number(isPlaceholder(b)));
-  }, [products, searchQuery, selectedCategory]);
+  // Подкатегории выбранной категории (для второго уровня фильтра)
+  const subcategoriesForCategory = selectedCategory !== 'Усі' ? (catalogTree[selectedCategory] || []) : [];
 
-  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
-
-  const paginatedProducts = useMemo(() => {
-    const start = (currentPage - 1) * PRODUCTS_PER_PAGE;
-    return filteredProducts.slice(start, start + PRODUCTS_PER_PAGE);
-  }, [filteredProducts, currentPage]);
-
-  // Сброс на первую страницу при смене категории/поиска
+  // Сброс на первую страницу при смене категории/подкатегории/поиска
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, selectedSubcategory, searchQuery]);
+
+  // При смене категории сбрасываем выбранную подкатегорию
+  useEffect(() => {
+    setSelectedSubcategory(null);
+  }, [selectedCategory]);
 
   // Показывать товары только когда выбрана категория, идёт поиск или включена админка.
   // На главной (категория «Усі», без поиска) вместо сетки товарів показываем опис магазину.
-  const showProducts = isAdminMode || selectedCategory !== 'Усі' || searchQuery.trim() !== '';
+  const showProducts = hasFilter;
 
-  const currentProduct = useMemo(() => products.find(p => p.id === activeProductId) || null, [activeProductId, products]);
+  // Догружаем одиночный товар, если открыт по прямой ссылке и его нет на текущей странице
+  useEffect(() => {
+    if (activeProductId == null) return;
+    if (products.some(p => p.id === activeProductId)) return;
+    if (directProduct?.id === activeProductId) return;
+    supabase.from('products').select('*').eq('id', activeProductId).single()
+      .then(({ data }) => { if (data) setDirectProduct(data as Product); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProductId, products]);
+
+  const currentProduct = useMemo(
+    () => products.find(p => p.id === activeProductId)
+      || (directProduct?.id === activeProductId ? directProduct : null),
+    [activeProductId, products, directProduct]
+  );
   const currentProductReviews = useMemo(() => reviews.filter(r => r.product_id === activeProductId), [reviews, activeProductId]);
 
   // ─── Admin ────────────────────────────────────────────────
@@ -907,25 +928,59 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 <p className="max-w-md text-xs text-slate-500">Обери розділ, щоб швидко знайти потрібні товари.</p>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {categories.filter(c => c.name !== 'Усі' && !chemistrySubcategoryNames.has(c.name)).map((cat) => {
-                  const isActive = selectedCategory === cat.name;
+                {Object.keys(catalogTree).map((catName) => {
+                  const isActive = selectedCategory === catName;
                   return (
                     <motion.button
-                      key={cat.name}
+                      key={catName}
                       whileHover={{ scale: 1.04 }}
                       whileTap={{ scale: 0.96 }}
-                      onClick={() => setSelectedCategory(cat.name)}
+                      onClick={() => setSelectedCategory(catName)}
                       className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
                         isActive
                           ? 'bg-purple-600 text-white border-purple-600 shadow-md'
                           : 'bg-white text-slate-700 border-slate-200 hover:border-purple-400 hover:text-purple-700'
                       }`}
                     >
-                      {cat.name}
+                      {catName}
                     </motion.button>
                   );
                 })}
               </div>
+
+              {/* Підкатегорії обраної категорії */}
+              {subcategoriesForCategory.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <motion.button
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => setSelectedSubcategory(null)}
+                    className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all border ${
+                      selectedSubcategory === null
+                        ? 'bg-orange-500 text-white border-orange-500 shadow'
+                        : 'bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400'
+                    }`}
+                  >
+                    Усі
+                  </motion.button>
+                  {subcategoriesForCategory.map((sub) => {
+                    const isActive = selectedSubcategory === sub;
+                    return (
+                      <motion.button
+                        key={sub}
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => setSelectedSubcategory(sub)}
+                        className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all border ${
+                          isActive
+                            ? 'bg-orange-500 text-white border-orange-500 shadow'
+                            : 'bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400'
+                        }`}
+                      >
+                        {sub}
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Автохімія підкатегорії */}
               <div className="mt-5 pt-5 border-t border-slate-100">
@@ -965,7 +1020,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </motion.div>
                 <p className="text-sm font-semibold text-slate-500">Завантаження товарів...</p>
               </div>
-            ) : filteredProducts.length === 0 ? (
+            ) : paginatedProducts.length === 0 ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
                 <PackageCheck className="h-12 w-12 text-slate-300 mx-auto mb-3" />
                 <p className="text-sm font-semibold text-slate-500">Товарів не знайдено</p>
