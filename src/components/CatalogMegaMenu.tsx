@@ -46,10 +46,18 @@ const CHEMISTRY_SUB_SET = new Set(CHEMISTRY_SUBCATEGORIES);
 
 interface CatalogMegaMenuProps {
   onSelect: (category: string, subcategory?: string) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ onSelect }) => {
-  const [open, setOpen] = useState(false);
+export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ onSelect, open: openProp, onOpenChange }) => {
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean | ((o: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(open) : next;
+    setOpenState(value);
+    onOpenChange?.(value);
+  };
   const [hovered, setHovered] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 

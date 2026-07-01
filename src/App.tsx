@@ -507,6 +507,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const PRODUCTS_PER_PAGE = 18;
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCatalogMenuOpen, setIsCatalogMenuOpen] = useState(false);
   const [showAddedToast, setShowAddedToast] = useState<number | null>(null);
 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -790,7 +791,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               <motion.div onClick={() => { setActiveProductId(null); setSelectedCategory('Усі'); setSearchQuery(''); }} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
                 AUTO<span className="text-orange-500">SHOP</span>
               </motion.div>
-              <CatalogMegaMenu onSelect={handleCatalogMenuSelect} />
+              <CatalogMegaMenu onSelect={handleCatalogMenuSelect} open={isCatalogMenuOpen} onOpenChange={setIsCatalogMenuOpen} />
             </div>
             <div className="flex items-center gap-2 sm:hidden shrink-0">
               {isAdminMode && (
@@ -937,7 +938,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         <>
           {/* Hero — только на главной */}
           {!showProducts && (
-            <Hero onBrowse={() => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+            <Hero onBrowse={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setIsCatalogMenuOpen(true); }} />
           )}
 
           {/* Categories — приховано на головній, показуємо лише при перегляді товарів */}
