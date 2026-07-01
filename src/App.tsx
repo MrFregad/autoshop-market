@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, ShoppingCart, X, Plus, Minus,
@@ -13,6 +13,7 @@ import { Analytics } from '@vercel/analytics/react';
 import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
 import { catalogTree } from './catalogTree';
+import { CatalogMegaMenu } from './components/CatalogMegaMenu';
 
 // ─── Types ──────────────────────────────────────────────────
 interface Product {
@@ -500,6 +501,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Усі');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const skipNextSubcategoryReset = useRef(false);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const PRODUCTS_PER_PAGE = 18;
@@ -634,9 +636,26 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   }, [selectedCategory, selectedSubcategory, searchQuery]);
 
   // При смене категории сбрасываем выбранную подкатегорию
+  // (кроме случаев, когда категория и подкатегория выбираются одновременно — см. handleCatalogMenuSelect)
   useEffect(() => {
+    if (skipNextSubcategoryReset.current) {
+      skipNextSubcategoryReset.current = false;
+      return;
+    }
     setSelectedSubcategory(null);
   }, [selectedCategory]);
+
+  // Выбор категории/подкатегории з мега-меню каталогу
+  const handleCatalogMenuSelect = (category: string, subcategory?: string) => {
+    setActiveProductId(null);
+    setSearchQuery('');
+    skipNextSubcategoryReset.current = true;
+    setSelectedCategory(category);
+    setSelectedSubcategory(subcategory ?? null);
+    requestAnimationFrame(() => {
+      document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
 
   // Показывать товары только когда выбрана категория, идёт поиск или включена админка.
   // На главной (категория «Усі», без поиска) вместо сетки товарів показываем опис магазину.
@@ -767,9 +786,12 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm backdrop-blur-md bg-white/95">
         <div className="mx-auto max-w-7xl px-3 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4 sm:py-3">
           <div className="flex items-center justify-between gap-3">
-            <motion.div onClick={() => { setActiveProductId(null); setSelectedCategory('Усі'); setSearchQuery(''); }} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
-              AUTO<span className="text-orange-500">SHOP</span>
-            </motion.div>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <motion.div onClick={() => { setActiveProductId(null); setSelectedCategory('Усі'); setSearchQuery(''); }} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
+                AUTO<span className="text-orange-500">SHOP</span>
+              </motion.div>
+              <CatalogMegaMenu onSelect={handleCatalogMenuSelect} />
+            </div>
             <div className="flex items-center gap-2 sm:hidden shrink-0">
               {isAdminMode && (
                 <motion.button initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => { setIsAdminMode(false); resetForm(); }} className="text-xs text-red-600 font-bold bg-red-50 px-2 py-1.5 rounded-lg border border-red-200">
