@@ -35,6 +35,15 @@ const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>
 };
 const DEFAULT_ICON = Package;
 
+// Підкатегорії Автохімії (Koch Chemie) — це самостійні категорії товарів,
+// тому при кліку відкриваються як окрема категорія (без батьківської «Автохімія»).
+const CHEMISTRY_SUBCATEGORIES = [
+  'Мийка авто', "Екстер'єр", "Інтер'єр", 'COLOURLOCK', 'Скло',
+  'NANO-захист', 'Консерванти', 'Поліювання', 'Обладнання (хімія)',
+  'Аксесуари (хімія)', 'Аромосаше', 'Набори (хімія)', 'Брендована продукція',
+];
+const CHEMISTRY_SUB_SET = new Set(CHEMISTRY_SUBCATEGORIES);
+
 interface CatalogMegaMenuProps {
   onSelect: (category: string, subcategory?: string) => void;
 }
@@ -47,7 +56,10 @@ export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ onSelect }) =>
   const categoryNames = Object.keys(catalogTree);
   const active = hovered || categoryNames[0];
   const ActiveIcon = CATEGORY_ICONS[active] || DEFAULT_ICON;
-  const subcats = catalogTree[active] || [];
+  const subcats =
+    active === 'Автохімія'
+      ? [...(catalogTree[active] || []), ...CHEMISTRY_SUBCATEGORIES]
+      : catalogTree[active] || [];
 
   useEffect(() => {
     if (!open) return;
@@ -169,7 +181,7 @@ export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ onSelect }) =>
                         {subcats.map((sub) => (
                           <button
                             key={sub}
-                            onClick={() => pick(active, sub)}
+                            onClick={() => (CHEMISTRY_SUB_SET.has(sub) ? pick(sub) : pick(active, sub))}
                             title={sub}
                             className="block w-full break-inside-avoid-column truncate rounded-lg px-2 py-1.5 text-left text-xs text-slate-600 transition-colors hover:bg-purple-50 hover:text-purple-700"
                           >

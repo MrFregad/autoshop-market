@@ -403,7 +403,7 @@ const Hero = ({ onBrowse }: { onBrowse: () => void }) => (
     <div className="relative mx-auto max-w-7xl px-4 py-12 sm:py-16 lg:py-20 grid lg:grid-cols-2 gap-10 items-center">
       <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3 py-1 text-xs font-semibold backdrop-blur">
-          <Zap className="h-3.5 w-3.5 text-yellow-300" /> Понад 14 000 товарів у каталозі
+          <Zap className="h-3.5 w-3.5 text-yellow-300" /> Понад 65 000 товарів у каталозі
         </span>
         <h1 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-black leading-[1.1] tracking-tight">
           Автоаксесуари і тюнінг <span className="text-orange-400">під твоє авто</span>
@@ -940,7 +940,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             <Hero onBrowse={() => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
           )}
 
-          {/* Categories */}
+          {/* Categories — приховано на головній, показуємо лише при перегляді товарів */}
+          {showProducts && (
           <div id="categories" className="bg-white border-b shadow-sm scroll-mt-20">
             <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-5">
               <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
@@ -1032,6 +1033,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               </div>
             </div>
           </div>
+          )}
 
           <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
             {/* Products Grid */}
@@ -1162,27 +1164,6 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               );
             })()}
 
-            {/* Trust badges */}
-            <motion.section initial="hidden" whileInView="visible" variants={fadeIn} className="mt-10">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { icon: <Truck className="h-6 w-6 text-purple-600" />, title: 'Швидка доставка', desc: '1-3 дні по Україні' },
-                  { icon: <Shield className="h-6 w-6 text-emerald-600" />, title: 'Гарантія якості', desc: 'Перевірені товари' },
-                  { icon: <Headphones className="h-6 w-6 text-sky-600" />, title: 'Підтримка 24/7', desc: 'Завжди на зв\u2019язку' },
-                  { icon: <Percent className="h-6 w-6 text-orange-600" />, title: 'Найкращі ціни', desc: 'Знижки та акції' },
-                ].map((badge, i) => (
-                  <motion.div key={i} custom={i} variants={fadeInUp} className="bg-white border rounded-xl p-4 flex items-center gap-3 hover:shadow-md transition-shadow">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-50">{badge.icon}</div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900">{badge.title}</h4>
-                      <p className="text-[10px] text-slate-500">{badge.desc}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.section>
-
-            {/* SEO Text Block — показываем только на главной */}
             {!showProducts && (
             <motion.section initial="hidden" whileInView="visible" variants={fadeIn} className="mt-10">
               <div className="bg-white border rounded-2xl p-6 sm:p-8 space-y-6 text-sm text-slate-600 leading-relaxed">
