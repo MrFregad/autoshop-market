@@ -6,7 +6,9 @@ import {
   Phone, Mail, Clock, Truck, CreditCard, AlertTriangle,
   PackageCheck, MapPin, Flame, ChevronRight, ChevronLeft,
   Zap, Shield, Headphones, Percent, Tag,
-  TruckIcon, Wallet, FileText, MessageCircle, Link2, Check
+  TruckIcon, Wallet, FileText, MessageCircle, Link2, Check,
+  Battery, SprayCan, Layers, DoorOpen, Lightbulb, Sparkles,
+  Sun, CarFront, Armchair
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
@@ -391,7 +393,37 @@ const PromoBanner = () => (
 );
 
 // ─── Hero (главная) ─────────────────────────────────────────
-const Hero = ({ onBrowse }: { onBrowse: () => void }) => (
+// Бейджі асортименту — показують широту каталогу з першого екрана
+const assortmentBadges = [
+  { icon: <Battery className="h-4 w-4" />, label: 'Акумулятори' },
+  { icon: <SprayCan className="h-4 w-4" />, label: 'Автохімія' },
+  { icon: <Layers className="h-4 w-4" />, label: 'Килимки' },
+  { icon: <DoorOpen className="h-4 w-4" />, label: 'Дверні ручки' },
+  { icon: <Lightbulb className="h-4 w-4" />, label: 'Оптика' },
+  { icon: <Sparkles className="h-4 w-4" />, label: 'Тюнінг' },
+];
+
+// Позиції плаваючих бейджів навколо карток переваг (desktop)
+const badgePositions = [
+  '-top-8 left-2', '-top-4 -right-16', 'top-1/3 -right-24',
+  'top-1/2 -left-24', '-bottom-6 -left-10', '-bottom-9 right-4',
+];
+
+// Найбільші категорії каталогу — клік веде у каталог з фільтром
+const heroCategories = [
+  { icon: <Layers className="h-6 w-6" />, name: 'Килимки' },
+  { icon: <SprayCan className="h-6 w-6" />, name: 'Автохімія' },
+  { icon: <Sun className="h-6 w-6" />, name: 'Автосвітло' },
+  { icon: <Lightbulb className="h-6 w-6" />, name: 'Автолампи' },
+  { icon: <CarFront className="h-6 w-6" />, name: 'Запчастини кузова' },
+  { icon: <Armchair className="h-6 w-6" />, name: 'Чохли' },
+];
+
+const Hero = ({ onBrowse, onSelectCategory, onOpenChat }: {
+  onBrowse: () => void;
+  onSelectCategory: (category: string) => void;
+  onOpenChat: () => void;
+}) => (
   <section className="relative overflow-hidden bg-gradient-to-br from-purple-700 via-violet-700 to-purple-900 text-white">
     {/* Декоративные пятна */}
     <div className="pointer-events-none absolute -top-24 -right-24 h-72 w-72 rounded-full bg-orange-500/25 blur-3xl" />
@@ -401,18 +433,33 @@ const Hero = ({ onBrowse }: { onBrowse: () => void }) => (
       style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize: '22px 22px' }}
     />
 
-    <div className="relative mx-auto max-w-7xl px-4 py-12 sm:py-16 lg:py-20 grid lg:grid-cols-2 gap-10 items-center">
+    <div className="relative mx-auto max-w-7xl px-4 py-12 sm:py-16 lg:py-20">
+      <div className="grid lg:grid-cols-2 gap-10 items-center">
       <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3 py-1 text-xs font-semibold backdrop-blur">
           <Zap className="h-3.5 w-3.5 text-yellow-300" /> Понад 65 000 товарів у каталозі
         </span>
         <h1 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-black leading-[1.1] tracking-tight">
-          Автоаксесуари і тюнінг <span className="text-orange-400">під твоє авто</span>
+          Все для твого авто <span className="text-orange-400">в одному місці</span>
         </h1>
         <p className="mt-4 max-w-xl text-sm sm:text-base text-purple-100 leading-relaxed">
-          Модельний підбір за маркою, поколінням і кузовом. Дефлектори, килимки, багажники, обвіси,
-          тюнінг-оптика та все для комфорту, захисту й стайлінгу.
+          Акумулятори, автохімія, килимки, дверні ручки, оптика, тюнінг та ще 20+ категорій.
+          Модельний підбір за маркою, поколінням і кузовом — від витратних дрібниць до стайлінгу.
         </p>
+        {/* Бейджі асортименту — на мобільних (на desktop вони плавають праворуч) */}
+        <div className="mt-5 flex flex-wrap gap-2 lg:hidden">
+          {assortmentBadges.map((b, i) => (
+            <motion.span
+              key={b.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.15 + i * 0.07 }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur"
+            >
+              <span className="text-orange-300">{b.icon}</span> {b.label}
+            </motion.span>
+          ))}
+        </div>
         <div className="mt-6 flex flex-wrap gap-3">
           <motion.button
             whileHover={{ scale: 1.03 }}
@@ -449,25 +496,100 @@ const Hero = ({ onBrowse }: { onBrowse: () => void }) => (
         transition={{ duration: 0.6, delay: 0.1 }}
         className="hidden lg:flex justify-center"
       >
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { icon: <Truck className="h-7 w-7" />, t: 'Швидка доставка', d: '1-3 дні по Україні' },
-            { icon: <Shield className="h-7 w-7" />, t: 'Гарантія якості', d: 'Перевірені товари' },
-            { icon: <Headphones className="h-7 w-7" />, t: 'Підтримка 24/7', d: 'Завжди на зв’язку' },
-            { icon: <Percent className="h-7 w-7" />, t: 'Знижки до 40%', d: 'Акції щотижня' },
-          ].map((c, i) => (
+        <div className="relative">
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { icon: <Truck className="h-7 w-7" />, t: 'Швидка доставка', d: '1-3 дні по Україні' },
+              { icon: <Shield className="h-7 w-7" />, t: 'Гарантія якості', d: 'Перевірені товари' },
+              { icon: <Headphones className="h-7 w-7" />, t: 'Підтримка 24/7', d: 'Завжди на зв’язку' },
+              { icon: <Percent className="h-7 w-7" />, t: 'Знижки до 40%', d: 'Акції щотижня' },
+            ].map((c, i) => (
+              <motion.div
+                key={i}
+                whileHover={{ y: -6 }}
+                className="bg-white/10 border border-white/20 rounded-2xl p-5 backdrop-blur w-44"
+              >
+                <div className="text-orange-300">{c.icon}</div>
+                <div className="mt-3 text-sm font-bold">{c.t}</div>
+                <div className="text-[11px] text-purple-200 mt-0.5">{c.d}</div>
+              </motion.div>
+            ))}
+          </div>
+          {/* Плаваючі бейджі асортименту навколо карток */}
+          {assortmentBadges.map((b, i) => (
             <motion.div
-              key={i}
-              whileHover={{ y: -6 }}
-              className="bg-white/10 border border-white/20 rounded-2xl p-5 backdrop-blur w-44"
+              key={b.label}
+              className={`absolute ${badgePositions[i]} flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3 py-1.5 text-xs font-bold backdrop-blur shadow-lg whitespace-nowrap`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, y: [0, -8, 0] }}
+              transition={{
+                opacity: { duration: 0.5, delay: 0.3 + i * 0.1 },
+                y: { repeat: Infinity, duration: 3.5 + i * 0.5, ease: 'easeInOut', delay: i * 0.4 },
+              }}
             >
-              <div className="text-orange-300">{c.icon}</div>
-              <div className="mt-3 text-sm font-bold">{c.t}</div>
-              <div className="text-[11px] text-purple-200 mt-0.5">{c.d}</div>
+              <span className="text-orange-300">{b.icon}</span> {b.label}
             </motion.div>
           ))}
         </div>
       </motion.div>
+      </div>
+
+      {/* Онлайн підтримка 24/7 — помітний банер з CTA у чат */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.25 }}
+        className="mt-10 flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl border border-orange-300/30 bg-gradient-to-r from-orange-500/25 to-amber-400/10 p-4 sm:p-5 backdrop-blur"
+      >
+        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-orange-500 shadow-lg shadow-orange-500/30">
+          <MessageCircle className="h-6 w-6 text-white" />
+          <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-green-400 border-2 border-purple-900 animate-pulse" />
+        </div>
+        <div className="flex-1">
+          <div className="text-sm sm:text-base font-black">Онлайн підтримка 24/7</div>
+          <div className="text-xs sm:text-sm text-purple-100 mt-0.5">
+            Не впевнені, чи є потрібна деталь? Запитайте в чаті — відповімо за кілька хвилин.
+          </div>
+        </div>
+        <motion.button
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={onOpenChat}
+          className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition flex items-center justify-center gap-2"
+        >
+          <MessageCircle className="h-4 w-4" /> Запитати в чаті
+        </motion.button>
+      </motion.div>
+
+      {/* Найбільші категорії — швидкий перехід у каталог */}
+      <div className="mt-8">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200">Популярні категорії</p>
+          <button
+            onClick={onBrowse}
+            className="flex items-center gap-1 text-xs font-semibold text-orange-300 hover:text-orange-200 transition"
+          >
+            Всі 24 категорії <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x md:grid md:grid-cols-6 md:overflow-visible md:mx-0 md:px-0 md:pb-0">
+          {heroCategories.map((c, i) => (
+            <motion.button
+              key={c.name}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.3 + i * 0.06 }}
+              whileHover={{ y: -4 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => onSelectCategory(c.name)}
+              className="snap-start shrink-0 w-32 md:w-auto flex flex-col items-center gap-2 rounded-2xl bg-white/10 border border-white/15 px-3 py-4 backdrop-blur hover:bg-white/20 hover:border-orange-300/50 transition text-center"
+            >
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-orange-300">{c.icon}</span>
+              <span className="text-xs font-bold leading-tight">{c.name}</span>
+            </motion.button>
+          ))}
+        </div>
+      </div>
     </div>
   </section>
 );
@@ -939,7 +1061,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         <>
           {/* Hero — только на главной */}
           {!showProducts && (
-            <Hero onBrowse={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setIsCatalogMenuOpen(true); }} />
+            <Hero
+              onBrowse={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setIsCatalogMenuOpen(true); }}
+              onSelectCategory={(cat) => handleCatalogMenuSelect(cat)}
+              onOpenChat={() => window.dispatchEvent(new Event('open-chat-widget'))}
+            />
           )}
 
           {/* Categories — приховано на головній, показуємо лише при перегляді товарів */}

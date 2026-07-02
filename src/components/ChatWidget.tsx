@@ -102,6 +102,16 @@ export const ChatWidget = () => {
     setUnread(0);
   };
 
+  // Відкриття чату ззовні (кнопка «Запитати в чаті» в Hero)
+  useEffect(() => {
+    const handler = () => {
+      setIsOpen(true);
+      setUnread(0);
+    };
+    window.addEventListener('open-chat-widget', handler);
+    return () => window.removeEventListener('open-chat-widget', handler);
+  }, []);
+
   const sendMessage = useCallback(async () => {
     const text = draft.trim();
     if (!text || isSending) return;
