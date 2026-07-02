@@ -1,7 +1,13 @@
 // POST /api/telegram-webhook
-// Webhook Telegram-бота: коли власник відповідає (Reply) на повідомлення
-// клієнта в Telegram, відповідь зберігається в Supabase і через Realtime
-// миттєво з'являється у віджеті чату на сайті.
+// Webhook Telegram-бота. Два режими відповіді клієнту на сайт:
+//
+// 1. Кімната чату (рекомендовано): група з увімкненими Темами (Topics),
+//    бот — адміністратор. Власник надсилає /setup у групі — після цього
+//    кожен клієнт отримує окрему тему, і будь-яке повідомлення в темі
+//    йде клієнту на сайт (бот ставить 👍, коли доставлено).
+//
+// 2. Fallback: Reply на повідомлення з тегом #chat_... в особистому чаті з ботом.
+//
 // Файл самодостатній (без локальних імпортів) — вимога стабільної роботи на Vercel.
 
 const TELEGRAM_BOT_TOKEN =
@@ -20,22 +26,83 @@ const SUPABASE_KEY =
 const SESSION_TAG_RE =
   /#chat_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 
-async function sendTelegram(text, replyToMessageId) {
+const sbHeaders = {
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  'Content-Type': 'application/json',
+};
+
+async function sbSelect(path) {
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: sbHeaders });
+  if (!resp.ok) return null;
+  return resp.json();
+}
+
+async function tg(method, payload) {
   const resp = await fetch(
-    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text,
-        ...(replyToMessageId
-          ? { reply_parameters: { message_id: replyToMessageId } }
-          : {}),
-      }),
+      body: JSON.stringify(payload),
     }
   );
   return resp.json();
+}
+
+async function insertAdminReply(sessionId, text) {
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
+    method: 'POST',
+    headers: sbHeaders,
+    body: JSON.stringify({ session_id: sessionId, sender: 'admin', text }),
+  });
+  return resp.ok;
+}
+
+// /setup у групі: реєструємо групу як кімнату чату
+async function handleSetup(msg) {
+  const chatId = String(msg.chat.id);
+
+  if (String(msg.from?.id) !== TELEGRAM_CHAT_ID) {
+    return; // команда доступна лише власнику магазину
+  }
+  if (!msg.chat.is_forum) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text: '⚠️ Спочатку увімкніть Теми: налаштування групи → «Теми» (Topics) → увімкнути. Потім надішліть /setup ще раз.',
+    });
+    return;
+  }
+
+  // Перевіряємо права бота: пробуємо створити і видалити тестову тему
+  const test = await tg('createForumTopic', { chat_id: chatId, name: '✅ Перевірка' });
+  if (!test.ok) {
+    await tg('sendMessage', {
+      chat_id: chatId,
+      text: '⚠️ Зробіть бота адміністратором групи з правом «Керування темами» (Manage Topics) і надішліть /setup ще раз.',
+    });
+    return;
+  }
+  await tg('deleteForumTopic', {
+    chat_id: chatId,
+    message_thread_id: test.result.message_thread_id,
+  });
+
+  // Зберігаємо id групи (upsert)
+  await fetch(`${SUPABASE_URL}/rest/v1/chat_config`, {
+    method: 'POST',
+    headers: { ...sbHeaders, Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({ key: 'chat_group_id', value: chatId }),
+  });
+
+  await tg('sendMessage', {
+    chat_id: chatId,
+    text:
+      '✅ Готово! Ця група — кімната чату з клієнтами.\n\n' +
+      'Кожен клієнт з сайту отримає окрему тему. Просто пишіть у тему — ' +
+      'відповідь миттєво з’явиться у клієнта на сайті (бот ставить 👍, коли доставлено).\n\n' +
+      'Замовлення, як і раніше, приходять в особисті повідомлення бота.',
+  });
 }
 
 export default async function handler(req, res) {
@@ -51,9 +118,50 @@ export default async function handler(req, res) {
 
   try {
     const msg = req.body?.message;
+    if (!msg?.text) {
+      return res.status(200).json({ ok: true });
+    }
 
-    // Реагуємо лише на текстові повідомлення від власника магазину
-    if (!msg?.text || String(msg.chat?.id) !== TELEGRAM_CHAT_ID) {
+    const chatIdStr = String(msg.chat?.id);
+    const isGroup = msg.chat?.type === 'group' || msg.chat?.type === 'supergroup';
+
+    // ── Команда /setup у групі ──
+    if (isGroup && /^\/setup(@\w+)?\s*$/.test(msg.text.trim())) {
+      await handleSetup(msg);
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Режим "кімната чату": повідомлення в темі групи ──
+    if (isGroup && msg.message_thread_id) {
+      const config = await sbSelect('chat_config?key=eq.chat_group_id&select=value');
+      if (config?.[0]?.value === chatIdStr) {
+        const rows = await sbSelect(
+          `chat_sessions?topic_id=eq.${msg.message_thread_id}&select=session_id`
+        );
+        const sessionId = rows?.[0]?.session_id;
+        if (sessionId) {
+          const ok = await insertAdminReply(sessionId, msg.text);
+          if (ok) {
+            // Тиха відмітка "доставлено" — реакція 👍 на повідомлення
+            await tg('setMessageReaction', {
+              chat_id: chatIdStr,
+              message_id: msg.message_id,
+              reaction: [{ type: 'emoji', emoji: '👍' }],
+            });
+          } else {
+            await tg('sendMessage', {
+              chat_id: chatIdStr,
+              message_thread_id: msg.message_thread_id,
+              text: '⚠️ Не вдалося доставити відповідь клієнту. Спробуйте ще раз.',
+            });
+          }
+        }
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    // ── Fallback: особистий чат власника, Reply з тегом #chat_... ──
+    if (chatIdStr !== TELEGRAM_CHAT_ID) {
       return res.status(200).json({ ok: true });
     }
 
@@ -62,40 +170,24 @@ export default async function handler(req, res) {
     const sessionId = repliedText?.match(SESSION_TAG_RE)?.[1]?.toLowerCase();
 
     if (!sessionId) {
-      // Текст без Reply на повідомлення клієнта — підказуємо, як відповідати
-      if (!msg.reply_to_message) {
-        await sendTelegram(
-          'ℹ️ Щоб відповісти клієнту на сайті, зробіть Reply (відповідь) на його повідомлення з тегом #chat_...',
-          msg.message_id
-        );
+      if (!msg.reply_to_message && !msg.text.startsWith('/')) {
+        await tg('sendMessage', {
+          chat_id: TELEGRAM_CHAT_ID,
+          text: 'ℹ️ Щоб відповісти клієнту на сайті, зробіть Reply (відповідь) на його повідомлення з тегом #chat_... Або створіть групу-кімнату чату: група з Темами → бот адміністратор → команда /setup.',
+          reply_parameters: { message_id: msg.message_id },
+        });
       }
       return res.status(200).json({ ok: true });
     }
 
-    const dbResp = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
-      method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        session_id: sessionId,
-        sender: 'admin',
-        text: msg.text,
-      }),
+    const ok = await insertAdminReply(sessionId, msg.text);
+    await tg('sendMessage', {
+      chat_id: TELEGRAM_CHAT_ID,
+      text: ok
+        ? '✅ Відповідь доставлена клієнту на сайт'
+        : '⚠️ Не вдалося доставити відповідь (перевірте таблицю chat_messages у Supabase)',
+      reply_parameters: { message_id: msg.message_id },
     });
-
-    if (dbResp.ok) {
-      await sendTelegram('✅ Відповідь доставлена клієнту на сайт', msg.message_id);
-    } else {
-      const detail = await dbResp.text();
-      console.error('Supabase insert failed:', dbResp.status, detail);
-      await sendTelegram(
-        '⚠️ Не вдалося доставити відповідь (перевірте таблицю chat_messages у Supabase)',
-        msg.message_id
-      );
-    }
 
     return res.status(200).json({ ok: true });
   } catch (err) {

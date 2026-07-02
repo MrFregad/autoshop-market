@@ -1,6 +1,12 @@
 // POST /api/chat-send
 // Приймає повідомлення клієнта з віджета чату на сайті:
-// зберігає його в Supabase (chat_messages) і пересилає власнику в Telegram.
+// зберігає його в Supabase (chat_messages) і пересилає в Telegram.
+//
+// Якщо налаштована група-кімната чату (команда /setup у групі з темами) —
+// кожен клієнт отримує окрему тему (Topic), відповідати можна просто
+// повідомленням у темі. Інакше — fallback: особисті повідомлення з тегом
+// #chat_... і відповіддю через Reply.
+//
 // Файл самодостатній (без локальних імпортів) — вимога стабільної роботи на Vercel.
 
 const TELEGRAM_BOT_TOKEN =
@@ -16,6 +22,59 @@ const SUPABASE_KEY =
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const sbHeaders = {
+  apikey: SUPABASE_KEY,
+  Authorization: `Bearer ${SUPABASE_KEY}`,
+  'Content-Type': 'application/json',
+};
+
+async function sbSelect(path) {
+  const resp = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: sbHeaders });
+  if (!resp.ok) return null;
+  return resp.json();
+}
+
+async function tg(method, payload) {
+  const resp = await fetch(
+    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }
+  );
+  return resp.json();
+}
+
+// Тема для сесії: беремо збережену або створюємо нову в групі
+async function getOrCreateTopic(groupId, sessionId, clientName) {
+  const rows = await sbSelect(
+    `chat_sessions?session_id=eq.${sessionId}&select=topic_id`
+  );
+  if (rows?.[0]?.topic_id) return rows[0].topic_id;
+
+  const shortId = sessionId.slice(0, 8);
+  const created = await tg('createForumTopic', {
+    chat_id: groupId,
+    name: `💬 Клієнт ${shortId}` + (clientName ? ` — ${clientName}` : ''),
+  });
+  if (!created.ok) {
+    throw new Error(`createForumTopic failed: ${JSON.stringify(created)}`);
+  }
+  const topicId = created.result.message_thread_id;
+
+  await fetch(`${SUPABASE_URL}/rest/v1/chat_sessions`, {
+    method: 'POST',
+    headers: { ...sbHeaders, Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      topic_id: topicId,
+      client_name: clientName,
+    }),
+  });
+  return topicId;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -37,12 +96,7 @@ export default async function handler(req, res) {
     // 1. Зберігаємо повідомлення в Supabase
     const dbResp = await fetch(`${SUPABASE_URL}/rest/v1/chat_messages`, {
       method: 'POST',
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-      },
+      headers: { ...sbHeaders, Prefer: 'return=representation' },
       body: JSON.stringify({
         session_id: sessionId,
         sender: 'client',
@@ -53,36 +107,54 @@ export default async function handler(req, res) {
     if (!dbResp.ok) {
       const detail = await dbResp.text();
       console.error('Supabase insert failed:', dbResp.status, detail);
-      return res.status(500).json({
-        ok: false,
-        error: 'db_insert_failed',
-        detail,
-      });
+      return res.status(500).json({ ok: false, error: 'db_insert_failed', detail });
     }
     const [message] = await dbResp.json();
 
-    // 2. Пересилаємо власнику в Telegram
-    const shortId = sessionId.slice(0, 8);
-    const tgResp = await fetch(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: TELEGRAM_CHAT_ID,
-          text:
-            `💬 Повідомлення з сайту (клієнт ${shortId})` +
-            (clientName ? `\n👤 ${clientName}` : '') +
-            `\n\n${text.trim()}` +
-            `\n\n#chat_${sessionId}` +
-            `\n↩️ Щоб відповісти клієнту — зробіть Reply на це повідомлення`,
-        }),
-      }
+    // 2. Пересилаємо в Telegram
+    const config = await sbSelect(
+      'chat_config?key=eq.chat_group_id&select=value'
     );
-    const tgData = await tgResp.json();
-    if (!tgData.ok) {
-      console.error('Telegram sendMessage failed:', JSON.stringify(tgData));
-      // Повідомлення вже в базі — не вважаємо це фатальною помилкою для клієнта
+    const groupId = config?.[0]?.value;
+    const shortId = sessionId.slice(0, 8);
+
+    if (groupId) {
+      // Режим "кімната чату": повідомлення в тему клієнта
+      let sent;
+      try {
+        const topicId = await getOrCreateTopic(groupId, sessionId, clientName);
+        sent = await tg('sendMessage', {
+          chat_id: groupId,
+          message_thread_id: topicId,
+          text: text.trim(),
+        });
+      } catch {
+        sent = { ok: false };
+      }
+      // Тему могли видалити вручну — створюємо заново і повторюємо
+      if (!sent?.ok) {
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/chat_sessions?session_id=eq.${sessionId}`,
+          { method: 'DELETE', headers: sbHeaders }
+        );
+        const topicId = await getOrCreateTopic(groupId, sessionId, clientName);
+        await tg('sendMessage', {
+          chat_id: groupId,
+          message_thread_id: topicId,
+          text: text.trim(),
+        });
+      }
+    } else {
+      // Fallback: особисті повідомлення власнику з тегом для Reply
+      await tg('sendMessage', {
+        chat_id: TELEGRAM_CHAT_ID,
+        text:
+          `💬 Повідомлення з сайту (клієнт ${shortId})` +
+          (clientName ? `\n👤 ${clientName}` : '') +
+          `\n\n${text.trim()}` +
+          `\n\n#chat_${sessionId}` +
+          `\n↩️ Щоб відповісти клієнту — зробіть Reply на це повідомлення`,
+      });
     }
 
     return res.status(200).json({ ok: true, message });
