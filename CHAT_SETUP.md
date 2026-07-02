@@ -7,16 +7,16 @@
 ## Як це працює
 
 1. Віджет ([src/components/ChatWidget.tsx](src/components/ChatWidget.tsx)) відправляє повідомлення на `/api/chat-send`.
-2. Функція [api/chat-send.ts](api/chat-send.ts) зберігає його в Supabase (таблиця `chat_messages`) і пересилає в Telegram з тегом `#chat_<id сесії>`.
-3. Ваш Reply у Telegram приходить на webhook [api/telegram-webhook.ts](api/telegram-webhook.ts), який зберігає відповідь у Supabase.
+2. Функція [api/chat-send.mjs](api/chat-send.mjs) зберігає його в Supabase (таблиця `chat_messages`) і пересилає в Telegram з тегом `#chat_<id сесії>`.
+3. Ваш Reply у Telegram приходить на webhook [api/telegram-webhook.mjs](api/telegram-webhook.mjs), який зберігає відповідь у Supabase.
 4. Віджет підписаний на Supabase Realtime — відповідь з'являється у клієнта миттєво, історія зберігається (localStorage + база).
 
 ## Налаштування (один раз)
 
 ### 1. Створити таблицю в Supabase — ЄДИНИЙ обов'язковий крок
 
-Відкрийте https://supabase.com/dashboard → ваш проєкт → **SQL Editor** →
-вставте вміст файлу [supabase/chat_messages.sql](supabase/chat_messages.sql) → **Run**.
+Відкрийте https://supabase.com/dashboard/project/vhvedefyixgluayqahhh/sql/new →
+вставте вміст файлу [supabase/chat_messages.sql](supabase/chat_messages.sql) → натисніть **Run**.
 
 ### 2. Webhook Telegram — уже налаштовано ✅
 
