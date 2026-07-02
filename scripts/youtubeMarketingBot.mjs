@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -109,7 +109,7 @@ async function runRenderVideo() {
   const renderDir = resolve(outDir, 'render-current');
   mkdirSync(renderDir, { recursive: true });
 
-  const avatarPath = resolve(renderDir, 'avatar.svg');
+  const avatarPath = resolve(renderDir, 'avatar.ppm');
   const voicePath = resolve(renderDir, 'voice.wav');
   const outputPath = resolve(outDir, 'autoshop-video.mp4');
   const voiceText = buildVoiceText(product);
@@ -651,48 +651,90 @@ function findFfmpeg() {
 }
 
 function buildVoiceText(product) {
-  const price = product.price ? `Цена от ${product.price} гривен.` : 'Актуальная цена есть на сайте.';
   return [
-    `AutoShop Market представляет: ${product.name}.`,
-    `Это полезный автоаксессуар из категории ${product.category}.`,
-    price,
-    'Смотрите товар и другие автотовары на сайте autoshop-market.vercel.app.'
+    'AutoShop Market.',
+    'Car accessories with delivery.',
+    'Check the product link in the description.'
   ].join(' ');
 }
 
 function createVoiceWav(text, outputPath) {
-  const psPath = `${outputPath}.ps1`;
-  const script = `
-Add-Type -AssemblyName System.Speech
-$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
-$speaker.Rate = 0
-$speaker.Volume = 100
-$speaker.SetOutputToWaveFile('${psEscape(outputPath)}')
-$speaker.Speak('${psEscape(text)}')
-$speaker.Dispose()
-`;
-  writeFileSync(psPath, script, 'utf8');
-  execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psPath], { stdio: 'pipe' });
+  if (existsSync(outputPath)) {
+    rmSync(outputPath, { force: true });
+  }
+  const ffmpeg = findFfmpeg();
+  execFileSync(ffmpeg, [
+    '-y',
+    '-f', 'lavfi',
+    '-i', `flite=text='${escapeFliteText(text)}':voice=slt`,
+    '-t', '8',
+    outputPath
+  ], { stdio: 'pipe', timeout: 30000 });
 }
 
 function createAvatarPng(outputPath) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="900" viewBox="0 0 640 900">
-  <rect width="640" height="900" fill="none"/>
-  <circle cx="320" cy="205" r="170" fill="#f97316"/>
-  <circle cx="320" cy="245" r="145" fill="#ffd0aa"/>
-  <circle cx="270" cy="235" r="25" fill="#fff"/>
-  <circle cx="370" cy="235" r="25" fill="#fff"/>
-  <circle cx="278" cy="242" r="11" fill="#111827"/>
-  <circle cx="378" cy="242" r="11" fill="#111827"/>
-  <path d="M265 300 Q320 345 385 300" fill="none" stroke="#111827" stroke-width="12" stroke-linecap="round"/>
-  <path d="M140 395 Q320 300 500 395 L535 820 H105 Z" fill="#7c3aed"/>
-  <rect x="260" y="455" width="120" height="235" rx="30" fill="#f97316"/>
-  <circle cx="120" cy="560" r="65" fill="#ffd0aa"/>
-  <circle cx="520" cy="560" r="65" fill="#ffd0aa"/>
-  <text x="172" y="640" font-family="Arial, sans-serif" font-size="62" font-weight="900" fill="#fff">AUTO</text>
-  <text x="172" y="720" font-family="Arial, sans-serif" font-size="62" font-weight="900" fill="#fb923c">SHOP</text>
-</svg>`;
-  writeFileSync(outputPath, svg, 'utf8');
+  const width = 640;
+  const height = 900;
+  const pixels = Buffer.alloc(width * height * 3, 0);
+  const colors = {
+    bg: [17, 24, 39],
+    purple: [124, 58, 237],
+    orange: [249, 115, 22],
+    skin: [255, 208, 170],
+    white: [255, 255, 255],
+    dark: [17, 24, 39],
+    slate: [30, 41, 59]
+  };
+
+  fillRect(0, 0, width, height, colors.bg);
+  fillCircle(320, 205, 174, colors.orange);
+  fillCircle(320, 245, 145, colors.skin);
+  fillCircle(270, 235, 25, colors.white);
+  fillCircle(370, 235, 25, colors.white);
+  fillCircle(278, 242, 11, colors.dark);
+  fillCircle(378, 242, 11, colors.dark);
+  drawSmile(320, 300, 80, colors.dark);
+  fillRect(132, 420, 380, 390, colors.purple);
+  fillRect(260, 455, 120, 235, colors.orange);
+  fillCircle(120, 560, 65, colors.skin);
+  fillCircle(520, 560, 65, colors.skin);
+  fillRect(175, 610, 290, 22, colors.white);
+  fillRect(175, 675, 250, 22, colors.orange);
+
+  const header = Buffer.from(`P6\n${width} ${height}\n255\n`, 'ascii');
+  writeFileSync(outputPath, Buffer.concat([header, pixels]));
+
+  function setPixel(x, y, color) {
+    if (x < 0 || y < 0 || x >= width || y >= height) return;
+    const index = (Math.floor(y) * width + Math.floor(x)) * 3;
+    pixels[index] = color[0];
+    pixels[index + 1] = color[1];
+    pixels[index + 2] = color[2];
+  }
+
+  function fillRect(x, y, w, h, color) {
+    for (let yy = y; yy < y + h; yy += 1) {
+      for (let xx = x; xx < x + w; xx += 1) setPixel(xx, yy, color);
+    }
+  }
+
+  function fillCircle(cx, cy, r, color) {
+    const r2 = r * r;
+    for (let y = cy - r; y <= cy + r; y += 1) {
+      for (let x = cx - r; x <= cx + r; x += 1) {
+        if ((x - cx) ** 2 + (y - cy) ** 2 <= r2) setPixel(x, y, color);
+      }
+    }
+  }
+
+  function drawSmile(cx, cy, r, color) {
+    for (let angle = 20; angle <= 160; angle += 0.4) {
+      const rad = angle * Math.PI / 180;
+      const x = cx + Math.cos(rad) * r;
+      const y = cy + Math.sin(rad) * r * 0.55;
+      fillCircle(Math.round(x), Math.round(y), 6, color);
+    }
+  }
 }
 
 function renderMp4({ ffmpeg, avatarPath, voicePath, outputPath, product, duration }) {
@@ -732,7 +774,6 @@ function renderMp4({ ffmpeg, avatarPath, voicePath, outputPath, product, duratio
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'aac',
-    '-shortest',
     outputPath
   ], { stdio: 'pipe' });
 }
@@ -762,6 +803,14 @@ function escapeDrawText(value) {
     .replace(/'/g, "\\\\'")
     .replace(/\[/g, '\\[')
     .replace(/\]/g, '\\]')
+    .replace(/,/g, '\\,');
+}
+
+function escapeFliteText(value) {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, '')
+    .replace(/:/g, '\\:')
     .replace(/,/g, '\\,');
 }
 

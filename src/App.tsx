@@ -14,6 +14,7 @@ import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
 import { catalogTree } from './catalogTree';
 import { CatalogMegaMenu } from './components/CatalogMegaMenu';
+import { ChatWidget } from './components/ChatWidget';
 
 // ─── Types ──────────────────────────────────────────────────
 interface Product {
@@ -1529,6 +1530,9 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Онлайн-чат з менеджером (сайт ↔ Telegram) */}
+      <ChatWidget />
 
       {/* Vercel Web Analytics */}
       <Analytics />
