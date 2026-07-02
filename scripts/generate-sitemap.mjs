@@ -1,4 +1,6 @@
-// Генерация public/sitemap.xml со всеми товарами (/product/:id).
+// Генерация sitemap со всеми товарами (/product/:id).
+// Google принимает максимум 50000 ссылок в одном файле, поэтому
+// public/sitemap.xml — индекс, а ссылки лежат в public/sitemap-1.xml, -2.xml и т.д.
 // Запуск: npm run sitemap
 import { createClient } from '@supabase/supabase-js';
 import { writeFileSync } from 'node:fs';
@@ -12,8 +14,9 @@ const supabase = createClient(
 );
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUT = resolve(__dirname, '../public/sitemap.xml');
+const PUBLIC_DIR = resolve(__dirname, '../public');
 const today = new Date().toISOString().slice(0, 10);
+const CHUNK = 40000;
 
 const isPlaceholder = (name) =>
   (name || '').trim().toLowerCase().startsWith('замовити будь-який товар');
@@ -45,11 +48,30 @@ const urls = [
   ),
 ];
 
-const xml =
-  `<?xml version="1.0" encoding="UTF-8"?>\n` +
-  `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
-  urls.join('\n') +
-  `\n</urlset>\n`;
+const chunks = [];
+for (let i = 0; i < urls.length; i += CHUNK) chunks.push(urls.slice(i, i + CHUNK));
 
-writeFileSync(OUT, xml, 'utf8');
-console.log(`Готово: ${products.length} товарів + головна → ${OUT}`);
+chunks.forEach((chunk, i) => {
+  const xml =
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    chunk.join('\n') +
+    `\n</urlset>\n`;
+  writeFileSync(resolve(PUBLIC_DIR, `sitemap-${i + 1}.xml`), xml, 'utf8');
+});
+
+const index =
+  `<?xml version="1.0" encoding="UTF-8"?>\n` +
+  `<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+  chunks
+    .map(
+      (_, i) =>
+        `  <sitemap>\n    <loc>${SITE}/sitemap-${i + 1}.xml</loc>\n    <lastmod>${today}</lastmod>\n  </sitemap>`
+    )
+    .join('\n') +
+  `\n</sitemapindex>\n`;
+writeFileSync(resolve(PUBLIC_DIR, 'sitemap.xml'), index, 'utf8');
+
+console.log(
+  `Готово: ${products.length} товарів + головна, ${chunks.length} файлів (sitemap-1..${chunks.length}.xml) → ${PUBLIC_DIR}`
+);
