@@ -88,9 +88,9 @@ const firstImg = (images: string[] | undefined, category?: string): string =>
   images?.[0] || getFallbackImage(category);
 
 // ─── Constants ──────────────────────────────────────────────
-const TELEGRAM_BOT_TOKEN = '8790461264:AAGLzB3NrwghrfMgHvSt7D19H5d3MoNy_ew';
-const TELEGRAM_CHAT_ID = '7545602942';
-const ADMIN_PASSWORD = 'admin123';
+// Секрети (токен бота, пароль адміністратора) живуть на сервері (папка api/) —
+// у код сторінки вони не потрапляють. Вхід в адмінку та відправка замовлень
+// ідуть через /api/admin і /api/order.
 
 const categories: CategoryItem[] = [
   { name: 'Усі', subtitle: '', image: '' },
@@ -640,6 +640,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const [isSendingOrder, setIsSendingOrder] = useState(false);
 
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [adminKey, setAdminKey] = useState('');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const [formName, setFormName] = useState('');
@@ -664,7 +665,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   }, []);
 
   // Признак «есть активный фильтр» — показываем товары (а не главную)
-  const isSearching = searchQuery.trim() !== '' && searchQuery.trim() !== ADMIN_PASSWORD;
+  const isSearching = searchQuery.trim() !== '';
   const hasFilter = isAdminMode || selectedCategory !== 'Усі' || isSearching;
 
   // Серверная пагинация: грузим только текущую страницу выбранного фильтра.
@@ -738,13 +739,24 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   // ─── Search & Filter ──────────────────────────────────────
-  const handleSearchSubmit = (e: React.FormEvent) => {
+  // Вхід в адмінку: пароль вводиться в рядок пошуку, перевіряється на сервері
+  const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim() === ADMIN_PASSWORD) {
-      setIsAdminMode(true);
-      setSearchQuery('');
-      alert('Вхід в панель адміністратора виконано!');
-    }
+    const query = searchQuery.trim();
+    if (!query || isAdminMode) return;
+    try {
+      const resp = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', password: query }),
+      });
+      if (resp.ok) {
+        setAdminKey(query);
+        setIsAdminMode(true);
+        setSearchQuery('');
+        alert('Вхід в панель адміністратора виконано!');
+      }
+    } catch { /* не пароль — звичайний пошук */ }
   };
 
   // Товары приходят уже отфильтрованными и постранично с сервера.
@@ -817,10 +829,19 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       condition: formCondition || null, color: formColor || null, description: formDescription || null,
       badge: formBadge || null,
     };
-    if (editingProduct) {
-      await supabase.from('products').update(productData).eq('id', editingProduct.id);
-    } else {
-      await supabase.from('products').insert([productData]);
+    const resp = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'save',
+        password: adminKey,
+        product: productData,
+        id: editingProduct?.id,
+      }),
+    });
+    if (!resp.ok) {
+      alert('Не вдалося зберегти товар. Спробуйте ще раз.');
+      return;
     }
     resetForm();
     fetchProducts();
@@ -845,7 +866,15 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const handleDeleteProduct = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     if (window.confirm('Видалити цей товар назавжди?')) {
-      await supabase.from('products').delete().eq('id', id);
+      const resp = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', password: adminKey, id }),
+      });
+      if (!resp.ok) {
+        alert('Не вдалося видалити товар. Спробуйте ще раз.');
+        return;
+      }
       if (activeProductId === id) setActiveProductId(null);
       fetchProducts();
     }
@@ -880,14 +909,14 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     if (!orderName.trim() || !orderPhone.trim() || !orderAddress.trim()) { alert('Заповніть усі поля!'); return; }
     if (cart.length === 0) { alert('Кошик порожній!'); return; }
 
-    const itemsText = cart.map(item => `• ${item.name} — ${item.quantity} шт. x ${item.price} ₴ = ${item.price * item.quantity} ₴`).join('\n');
-    const message = `🛒 *Нове замовлення з AUTOSHOP-MARKET*\n\n👤 Ім'я: ${orderName}\n📞 Телефон: ${orderPhone}\n📍 Адреса: ${orderAddress}\n\n*Товари:*\n${itemsText}\n\n💰 *Разом: ${cartTotal} ₴*`;
-
     setIsSendingOrder(true);
     try {
-      const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      const response = await fetch('/api/order', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: message, parse_mode: 'Markdown' }),
+        body: JSON.stringify({
+          name: orderName, phone: orderPhone, address: orderAddress,
+          items: cart.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+        }),
       });
       const data = await response.json();
       if (data.ok) {
