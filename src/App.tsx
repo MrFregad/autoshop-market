@@ -14,7 +14,6 @@ import { useNavigate, useLocation } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
-import { catalogTree } from './catalogTree';
 import { CatalogMegaMenu } from './components/CatalogMegaMenu';
 import { ChatWidget } from './components/ChatWidget';
 
@@ -131,12 +130,6 @@ const categories: CategoryItem[] = [
   { name: 'Набори (хімія)', subtitle: '', image: '' },
   { name: 'Брендована продукція', subtitle: '', image: '' },
 ];
-
-const chemistrySubcategoryNames = new Set([
-  'Мийка авто', "Екстер'єр", "Інтер'єр", 'COLOURLOCK', 'Скло',
-  'NANO-захист', 'Консерванти', 'Поліювання', 'Обладнання (хімія)',
-  'Аксесуари (хімія)', 'Аромосаше', 'Набори (хімія)', 'Брендована продукція',
-]);
 
 const oversizedCategories = [
   'Дитячі автокрісла', 'Лебідки електричні', 'Автомобільні акумулятори', 'Вантажні акумулятори',
@@ -622,6 +615,9 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   activeProduct?.images?.[0] || ''
 );
   const [searchQuery, setSearchQuery] = useState('');
+  // Выпадающий список результатов под полем поиска
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
   const [selectedCategory, setSelectedCategory] = useState('Усі');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const skipNextSubcategoryReset = useRef(false);
@@ -754,22 +750,38 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         setAdminKey(query);
         setIsAdminMode(true);
         setSearchQuery('');
+        setIsSearchDropdownOpen(false);
         alert('Вхід в панель адміністратора виконано!');
+        return;
       }
     } catch { /* не пароль — звичайний пошук */ }
+    // Обычный поиск: закрываем выпадающий список и показываем полную сетку результатов
+    setIsSearchDropdownOpen(false);
+    setActiveProductId(null);
+    requestAnimationFrame(() => {
+      document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   // Товары приходят уже отфильтрованными и постранично с сервера.
   const paginatedProducts = products;
   const totalPages = Math.max(1, Math.ceil(totalCount / PRODUCTS_PER_PAGE));
 
-  // Подкатегории выбранной категории (для второго уровня фильтра)
-  const subcategoriesForCategory = selectedCategory !== 'Усі' ? (catalogTree[selectedCategory] || []) : [];
-
   // Сброс на первую страницу при смене категории/подкатегории/поиска
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedCategory, selectedSubcategory, searchQuery]);
+
+  // Закрываем выпадающий список поиска при клике вне его
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) {
+        setIsSearchDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // При смене категории сбрасываем выбранную подкатегорию
   // (кроме случаев, когда категория и подкатегория выбираются одновременно — см. handleCatalogMenuSelect)
@@ -962,17 +974,66 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             </div>
           </div>
 
-          <form onSubmit={handleSearchSubmit} className="flex flex-1 max-w-xl items-center border border-slate-300 rounded-xl bg-slate-50 focus-within:border-purple-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-purple-100 transition-all">
-            <input
-              type="text" placeholder="Пошук товарів..." value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent py-2.5 px-3 text-sm outline-none text-slate-900"
-            />
-            <button type="submit" className="bg-purple-600 text-white text-sm px-4 py-2.5 rounded-r-xl font-semibold hover:bg-purple-700 transition-colors flex items-center gap-1 shrink-0">
-              <Search className="h-4 w-4" />
-              <span className="hidden sm:inline">Знайти</span>
-            </button>
-          </form>
+          <div ref={searchBoxRef} className="relative flex-1 max-w-xl">
+            <form onSubmit={handleSearchSubmit} className="flex items-center border border-slate-300 rounded-xl bg-slate-50 focus-within:border-purple-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-purple-100 transition-all">
+              <input
+                type="text" placeholder="Пошук товарів..." value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setIsSearchDropdownOpen(e.target.value.trim() !== ''); }}
+                onFocus={() => { if (searchQuery.trim() !== '') setIsSearchDropdownOpen(true); }}
+                className="w-full bg-transparent py-2.5 px-3 text-sm outline-none text-slate-900"
+              />
+              <button type="submit" className="bg-purple-600 text-white text-sm px-4 py-2.5 rounded-r-xl font-semibold hover:bg-purple-700 transition-colors flex items-center gap-1 shrink-0">
+                <Search className="h-4 w-4" />
+                <span className="hidden sm:inline">Знайти</span>
+              </button>
+            </form>
+
+            {/* Результаты поиска прямо под полем */}
+            {isSearchDropdownOpen && isSearching && !isAdminMode && (
+              <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden">
+                {isLoading ? (
+                  <div className="px-4 py-3 text-sm text-slate-500">Шукаємо...</div>
+                ) : products.length === 0 ? (
+                  <div className="px-4 py-3 text-sm text-slate-500">Нічого не знайдено</div>
+                ) : (
+                  <>
+                    <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100">
+                      {products.slice(0, 8).map(p => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => { setActiveProductId(p.id); setIsSearchDropdownOpen(false); }}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-purple-50 transition-colors"
+                        >
+                          <img src={p.images?.[0]} alt={p.name} className="w-11 h-11 rounded-lg object-cover bg-slate-100 shrink-0" loading="lazy" />
+                          <span className="flex-1 text-sm text-slate-800 line-clamp-2 min-w-0">{p.name}</span>
+                          <span className="shrink-0 text-right">
+                            {p.old_price && <span className="block text-[11px] text-slate-400 line-through">{p.old_price} ₴</span>}
+                            <span className="text-sm font-bold text-purple-700">{p.price} ₴</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {totalCount > 8 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSearchDropdownOpen(false);
+                          setActiveProductId(null);
+                          requestAnimationFrame(() => {
+                            document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          });
+                        }}
+                        className="w-full px-4 py-2.5 text-sm font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors"
+                      >
+                        Показати всі результати ({totalCount})
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="hidden sm:flex items-center gap-3 shrink-0">
             {isAdminMode && (
@@ -1097,97 +1158,46 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             />
           )}
 
-          {/* Categories — приховано на головній, показуємо лише при перегляді товарів */}
+          {/* Хлебные крошки — путь вместо блока с плитками категорий */}
           {showProducts && (
           <div id="categories" className="bg-white border-b shadow-sm scroll-mt-20">
-            <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-5">
-              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-600">Підбір за напрямком</p>
-                </div>
-                <p className="max-w-md text-xs text-slate-500">Обери розділ, щоб швидко знайти потрібні товари.</p>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.keys(catalogTree).map((catName) => {
-                  const isActive = selectedCategory === catName;
-                  return (
-                    <motion.button
-                      key={catName}
-                      whileHover={{ scale: 1.04 }}
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => setSelectedCategory(catName)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
-                        isActive
-                          ? 'bg-purple-600 text-white border-purple-600 shadow-md'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-purple-400 hover:text-purple-700'
-                      }`}
-                    >
-                      {catName}
-                    </motion.button>
-                  );
-                })}
-              </div>
-
-              {/* Підкатегорії обраної категорії */}
-              {subcategoriesForCategory.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <motion.button
-                    whileTap={{ scale: 0.96 }}
-                    onClick={() => setSelectedSubcategory(null)}
-                    className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all border ${
-                      selectedSubcategory === null
-                        ? 'bg-orange-500 text-white border-orange-500 shadow'
-                        : 'bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400'
-                    }`}
-                  >
-                    Усі
-                  </motion.button>
-                  {subcategoriesForCategory.map((sub) => {
-                    const isActive = selectedSubcategory === sub;
-                    return (
-                      <motion.button
-                        key={sub}
-                        whileTap={{ scale: 0.96 }}
-                        onClick={() => setSelectedSubcategory(sub)}
-                        className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-all border ${
-                          isActive
-                            ? 'bg-orange-500 text-white border-orange-500 shadow'
-                            : 'bg-orange-50 text-orange-700 border-orange-200 hover:border-orange-400'
-                        }`}
+            <div className="mx-auto max-w-7xl px-3 sm:px-4 py-3 flex flex-wrap items-center gap-1.5 text-sm">
+              <button
+                onClick={() => { setActiveProductId(null); setSelectedCategory('Усі'); setSearchQuery(''); }}
+                className="text-slate-500 hover:text-purple-700 transition-colors font-medium"
+              >
+                Головна
+              </button>
+              {isSearching ? (
+                <>
+                  <span className="text-slate-300">→</span>
+                  <span className="font-semibold text-slate-800">Пошук: «{searchQuery.trim()}»</span>
+                  {!isLoading && <span className="text-xs text-slate-400">({totalCount})</span>}
+                </>
+              ) : selectedCategory !== 'Усі' ? (
+                <>
+                  <span className="text-slate-300">→</span>
+                  {selectedSubcategory ? (
+                    <>
+                      <button
+                        onClick={() => setSelectedSubcategory(null)}
+                        className="text-slate-500 hover:text-purple-700 transition-colors font-medium"
                       >
-                        {sub}
-                      </motion.button>
-                    );
-                  })}
-                </div>
+                        {selectedCategory}
+                      </button>
+                      <span className="text-slate-300">→</span>
+                      <span className="font-semibold text-slate-800">{selectedSubcategory}</span>
+                    </>
+                  ) : (
+                    <span className="font-semibold text-slate-800">{selectedCategory}</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="text-slate-300">→</span>
+                  <span className="font-semibold text-slate-800">Усі товари</span>
+                </>
               )}
-
-              {/* Автохімія підкатегорії */}
-              <div className="mt-5 pt-5 border-t border-slate-100">
-                <div className="mb-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-600">Автохімія</p>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {categories.filter(c => chemistrySubcategoryNames.has(c.name)).map((cat) => {
-                    const isActive = selectedCategory === cat.name;
-                    return (
-                      <motion.button
-                        key={cat.name}
-                        whileHover={{ scale: 1.04 }}
-                        whileTap={{ scale: 0.96 }}
-                        onClick={() => setSelectedCategory(cat.name)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${
-                          isActive
-                            ? 'bg-purple-600 text-white border-purple-600 shadow-md'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-purple-400 hover:text-purple-700'
-                        }`}
-                      >
-                        {cat.name}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
           </div>
           )}
