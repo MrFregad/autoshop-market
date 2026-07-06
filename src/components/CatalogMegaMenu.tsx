@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { catalogTree } from '../catalogTree';
 
-const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+export const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   'Автолампи': Lightbulb,
   'Автомобільні диски': CircleDot,
   'Автосвітло': SunMedium,
@@ -33,7 +33,7 @@ const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>
   'Шумовіброізоляція': Volume2,
   'OffRoad аксесуари': TreePine,
 };
-const DEFAULT_ICON = Package;
+export const DEFAULT_ICON = Package;
 
 // Підкатегорії Автохімії (Koch Chemie) — це самостійні категорії товарів,
 // тому при кліку відкриваються як окрема категорія (без батьківської «Автохімія»).

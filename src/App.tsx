@@ -14,7 +14,8 @@ import { useNavigate, useLocation } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
-import { CatalogMegaMenu } from './components/CatalogMegaMenu';
+import { CatalogMegaMenu, CATEGORY_ICONS, DEFAULT_ICON } from './components/CatalogMegaMenu';
+import { catalogTree } from './catalogTree';
 import { ChatWidget } from './components/ChatWidget';
 
 // ─── Types ──────────────────────────────────────────────────
@@ -409,18 +410,11 @@ const assortmentBadges = [
   { icon: <Sparkles className="h-4 w-4" />, label: 'Тюнінг' },
 ];
 
-// Права частина Hero (desktop): картки категорій з реальними фото товарів з каталогу
-const heroCategoryCards = [
-  { name: 'Килимки', img: 'https://ddaudio.com.ua/assets/galleries/147374/44.jpg' },
-  { name: 'Автохімія', img: 'https://ddaudio.com.ua/assets/galleries/85440/ws7_2193.jpg' },
-  { name: 'Автосвітло', img: 'https://ddaudio.com.ua/assets/galleries/146706/ws7_4855.jpg' },
-  { name: 'Автолампи', img: 'https://ddaudio.com.ua/assets/galleries/126174/ws7_9780.jpg' },
-  { name: 'Запчастини кузова', img: 'https://ddaudio.com.ua/assets/images/dekor_rosprodazha/LX570-dz.jpg' },
-  { name: 'Автомобільні диски', img: 'https://ddaudio.com.ua/assets/galleries/90572/ws7_3122-1.jpg' },
-];
+// Права частина Hero (desktop): повний список категорій каталогу (як у мега-меню)
+const heroAllCategories = Object.keys(catalogTree);
 
 // Найбільші категорії каталогу — клік веде у каталог з фільтром
-// (не дублюють картки з фото праворуч у Hero)
+// (на desktop приховані — там праворуч у Hero показані всі категорії)
 const heroCategories = [
   { icon: <Wind className="h-6 w-6" />, name: 'Дефлектори' },
   { icon: <Sparkles className="h-6 w-6" />, name: 'Хром накладки' },
@@ -475,10 +469,10 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat }: {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={onBrowse}
+            onClick={onOpenChat}
             className="bg-white text-purple-700 px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-purple-50 transition flex items-center gap-2"
           >
-            <Search className="h-4 w-4" /> Обрати категорію
+            <CarFront className="h-4 w-4" /> Підібрати під моє авто
           </motion.button>
           <a
             href="tel:0976020714"
@@ -507,35 +501,36 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat }: {
         transition={{ duration: 0.6, delay: 0.1 }}
         className="hidden lg:flex justify-center"
       >
-        <div className="grid grid-cols-3 gap-4">
-          {heroCategoryCards.map((c, i) => (
-            <motion.button
-              key={c.name}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.45, delay: 0.15 + i * 0.08 }}
-              whileHover={{ y: -6 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => onSelectCategory(c.name)}
-              className="group w-40 rounded-2xl bg-white shadow-xl shadow-purple-950/30 overflow-hidden border-2 border-transparent hover:border-orange-400 transition text-left"
-            >
-              <div className="aspect-square bg-white p-2 flex items-center justify-center">
-                <img
-                  src={thumbUrl(c.img, 300)}
-                  alt={c.name}
-                  width={144}
-                  height={144}
-                  loading="eager"
-                  decoding="async"
-                  className="h-full w-full object-cover rounded-xl transition-transform duration-300 group-hover:scale-105"
-                />
-              </div>
-              <div className="flex items-center justify-between gap-1 px-3 py-2.5 bg-gradient-to-r from-purple-50 to-white border-t border-slate-100">
-                <span className="text-xs font-bold text-slate-800 leading-tight">{c.name}</span>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-purple-400 group-hover:text-orange-500 transition" />
-              </div>
-            </motion.button>
-          ))}
+        <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
+          <div className="mb-3 flex items-center justify-between border-b border-white/15 px-1 pb-3">
+            <span className="text-sm font-black text-white">Категорії каталогу</span>
+            <span className="rounded-full bg-orange-500/25 px-2.5 py-0.5 text-[11px] font-bold text-orange-300">
+              {heroAllCategories.length} категорії
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+            {heroAllCategories.map((name, i) => {
+              const Icon = CATEGORY_ICONS[name] || DEFAULT_ICON;
+              return (
+                <motion.button
+                  key={name}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.15 + i * 0.02 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => onSelectCategory(name)}
+                  className="group flex items-center gap-2 rounded-xl px-2 py-1.5 text-left transition hover:bg-white/10"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-orange-300 transition group-hover:bg-orange-500 group-hover:text-white">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 text-[11.5px] font-semibold leading-tight text-white transition">
+                    {name}
+                  </span>
+                </motion.button>
+              );
+            })}
+          </div>
         </div>
       </motion.div>
       </div>
@@ -567,8 +562,8 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat }: {
         </motion.button>
       </motion.div>
 
-      {/* Найбільші категорії — швидкий перехід у каталог */}
-      <div className="mt-8">
+      {/* Найбільші категорії — швидкий перехід у каталог (мобільні/планшети) */}
+      <div className="mt-8 lg:hidden">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200">Популярні категорії</p>
           <button
