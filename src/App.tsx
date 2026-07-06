@@ -86,6 +86,16 @@ const imgError = (category?: string) => (e: React.SyntheticEvent<HTMLImageElemen
 const firstImg = (images: string[] | undefined, category?: string): string =>
   images?.[0] || getFallbackImage(category);
 
+// Зменшена версія зображення для превʼю (сітка каталогу, кошик, мініатюри).
+// У картинок з CDN Prom.ua розмір зашитий прямо в URL токеном _wXXX_hXXX_ —
+// замінюємо його на менший, і CDN сам віддає полегшену версію (у рази менше КБ).
+// URL без такого токена повертаємо без змін.
+const thumbUrl = (url: string, size = 400): string => {
+  if (!url) return url;
+  if (/_w\d+_h\d+_/.test(url)) return url.replace(/_w\d+_h\d+_/, `_w${size}_h${size}_`);
+  return url;
+};
+
 // ─── Constants ──────────────────────────────────────────────
 // Секрети (токен бота, пароль адміністратора) живуть на сервері (папка api/) —
 // у код сторінки вони не потрапляють. Вхід в адмінку та відправка замовлень
@@ -1005,7 +1015,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                           onClick={() => { setActiveProductId(p.id); setIsSearchDropdownOpen(false); }}
                           className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-purple-50 transition-colors"
                         >
-                          <img src={p.images?.[0]} alt={p.name} className="w-11 h-11 rounded-lg object-cover bg-slate-100 shrink-0" loading="lazy" />
+                          <img src={p.images?.[0] ? thumbUrl(p.images[0], 100) : undefined} alt={p.name} width={44} height={44} loading="lazy" decoding="async" className="w-11 h-11 rounded-lg object-cover bg-slate-100 shrink-0" />
                           <span className="flex-1 text-sm text-slate-800 line-clamp-2 min-w-0">{p.name}</span>
                           <span className="shrink-0 text-right">
                             {p.old_price && <span className="block text-[11px] text-slate-400 line-through">{p.old_price} ₴</span>}
@@ -1244,7 +1254,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                       <ProductBadge type={product.badge} />
 
                       <div className="aspect-square w-full overflow-hidden rounded-xl bg-slate-50 flex items-center justify-center relative">
-                        <img src={firstImg(product.images, product.category)} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" onError={imgError(product.category)} />
+                        <img src={thumbUrl(firstImg(product.images, product.category), 400)} alt={product.name} width={400} height={400} loading={i < 6 ? 'eager' : 'lazy'} decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" onError={imgError(product.category)} />
                         <motion.div
                           initial={{ opacity: 0 }}
                           whileHover={{ opacity: 1 }}
@@ -1450,7 +1460,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                     onClick={() => setSelectedReviewImage(img)}
                     className={`w-12 h-12 border-2 rounded-lg p-0.5 transition shrink-0 ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
                   >
-                    <img src={img} alt="" className="w-full h-full object-cover rounded-md" onError={imgError(currentProduct.category)} />
+                    <img src={thumbUrl(img, 150)} alt="" width={48} height={48} loading="lazy" decoding="async" className="w-full h-full object-cover rounded-md" onError={imgError(currentProduct.category)} />
                   </motion.button>
                 ))}
               </div>
@@ -1464,7 +1474,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                       onClick={() => setSelectedReviewImage(img)}
                       className={`w-14 h-14 border-2 rounded-xl p-0.5 transition ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
                     >
-                      <img src={img} alt="" className="w-full h-full object-cover rounded-lg" onError={imgError(currentProduct.category)} />
+                      <img src={thumbUrl(img, 150)} alt="" width={56} height={56} loading="lazy" decoding="async" className="w-full h-full object-cover rounded-lg" onError={imgError(currentProduct.category)} />
                     </motion.button>
                   ))}
                 </div>
@@ -1619,7 +1629,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   <AnimatePresence>
                     {cart.map((item) => (
                       <motion.div key={item.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -100 }} className="flex gap-4 border-b pb-4">
-                        <img src={firstImg(item.images, item.category)} alt="" className="h-16 w-16 rounded-xl object-cover shadow-sm" onError={imgError(item.category)} />
+                        <img src={thumbUrl(firstImg(item.images, item.category), 150)} alt={item.name} width={64} height={64} loading="lazy" decoding="async" className="h-16 w-16 rounded-xl object-cover shadow-sm" onError={imgError(item.category)} />
                         <div className="flex flex-1 flex-col justify-between">
                           <h4 className="text-xs font-medium text-slate-800 line-clamp-2">{item.name}</h4>
                           <div className="flex items-center justify-between mt-2">
