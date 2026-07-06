@@ -5,10 +5,10 @@ import {
   Trash2, Edit2, ArrowLeft, Star,
   Phone, Mail, Clock, Truck, CreditCard, AlertTriangle,
   PackageCheck, MapPin, Flame, ChevronRight, ChevronLeft,
-  Zap, Shield, Headphones, Percent, Tag,
+  Zap, Headphones, Percent, Tag,
   TruckIcon, Wallet, FileText, MessageCircle, Link2, Check,
   Battery, SprayCan, Layers, DoorOpen, Lightbulb, Sparkles,
-  Sun, CarFront, Armchair
+  CarFront, Armchair, Wind
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
@@ -409,20 +409,25 @@ const assortmentBadges = [
   { icon: <Sparkles className="h-4 w-4" />, label: 'Тюнінг' },
 ];
 
-// Позиції плаваючих бейджів навколо карток переваг (desktop)
-const badgePositions = [
-  '-top-8 left-2', '-top-4 -right-16', 'top-1/3 -right-24',
-  'top-1/2 -left-24', '-bottom-6 -left-10', '-bottom-9 right-4',
+// Права частина Hero (desktop): картки категорій з реальними фото товарів з каталогу
+const heroCategoryCards = [
+  { name: 'Килимки', img: 'https://ddaudio.com.ua/assets/galleries/147374/44.jpg' },
+  { name: 'Автохімія', img: 'https://ddaudio.com.ua/assets/galleries/85440/ws7_2193.jpg' },
+  { name: 'Автосвітло', img: 'https://ddaudio.com.ua/assets/galleries/146706/ws7_4855.jpg' },
+  { name: 'Автолампи', img: 'https://ddaudio.com.ua/assets/galleries/126174/ws7_9780.jpg' },
+  { name: 'Запчастини кузова', img: 'https://ddaudio.com.ua/assets/images/dekor_rosprodazha/LX570-dz.jpg' },
+  { name: 'Автомобільні диски', img: 'https://ddaudio.com.ua/assets/galleries/90572/ws7_3122-1.jpg' },
 ];
 
 // Найбільші категорії каталогу — клік веде у каталог з фільтром
+// (не дублюють картки з фото праворуч у Hero)
 const heroCategories = [
-  { icon: <Layers className="h-6 w-6" />, name: 'Килимки' },
-  { icon: <SprayCan className="h-6 w-6" />, name: 'Автохімія' },
-  { icon: <Sun className="h-6 w-6" />, name: 'Автосвітло' },
-  { icon: <Lightbulb className="h-6 w-6" />, name: 'Автолампи' },
-  { icon: <CarFront className="h-6 w-6" />, name: 'Запчастини кузова' },
-  { icon: <Armchair className="h-6 w-6" />, name: 'Чохли' },
+  { icon: <Wind className="h-6 w-6" />, name: 'Дефлектори' },
+  { icon: <Sparkles className="h-6 w-6" />, name: 'Хром накладки' },
+  { icon: <CarFront className="h-6 w-6" />, name: 'Обвіси' },
+  { icon: <Armchair className="h-6 w-6" />, name: 'Аксесуари для авто в салон' },
+  { icon: <Tag className="h-6 w-6" />, name: 'Шильдики' },
+  { icon: <Layers className="h-6 w-6" />, name: 'Чохли' },
 ];
 
 const Hero = ({ onBrowse, onSelectCategory, onOpenChat }: {
@@ -502,39 +507,34 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat }: {
         transition={{ duration: 0.6, delay: 0.1 }}
         className="hidden lg:flex justify-center"
       >
-        <div className="relative">
-          <div className="grid grid-cols-2 gap-4">
-            {[
-              { icon: <Truck className="h-7 w-7" />, t: 'Швидка доставка', d: '1-3 дні по Україні' },
-              { icon: <Shield className="h-7 w-7" />, t: 'Гарантія якості', d: 'Перевірені товари' },
-              { icon: <Headphones className="h-7 w-7" />, t: 'Підтримка 24/7', d: 'Завжди на зв’язку' },
-              { icon: <Percent className="h-7 w-7" />, t: 'Знижки до 40%', d: 'Акції щотижня' },
-            ].map((c, i) => (
-              <motion.div
-                key={i}
-                whileHover={{ y: -6 }}
-                className="bg-white/10 border border-white/20 rounded-2xl p-5 backdrop-blur w-44"
-              >
-                <div className="text-orange-300">{c.icon}</div>
-                <div className="mt-3 text-sm font-bold">{c.t}</div>
-                <div className="text-[11px] text-purple-200 mt-0.5">{c.d}</div>
-              </motion.div>
-            ))}
-          </div>
-          {/* Плаваючі бейджі асортименту навколо карток */}
-          {assortmentBadges.map((b, i) => (
-            <motion.div
-              key={b.label}
-              className={`absolute ${badgePositions[i]} flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3 py-1.5 text-xs font-bold backdrop-blur shadow-lg whitespace-nowrap`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, y: [0, -8, 0] }}
-              transition={{
-                opacity: { duration: 0.5, delay: 0.3 + i * 0.1 },
-                y: { repeat: Infinity, duration: 3.5 + i * 0.5, ease: 'easeInOut', delay: i * 0.4 },
-              }}
+        <div className="grid grid-cols-3 gap-4">
+          {heroCategoryCards.map((c, i) => (
+            <motion.button
+              key={c.name}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, delay: 0.15 + i * 0.08 }}
+              whileHover={{ y: -6 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => onSelectCategory(c.name)}
+              className="group w-40 rounded-2xl bg-white shadow-xl shadow-purple-950/30 overflow-hidden border-2 border-transparent hover:border-orange-400 transition text-left"
             >
-              <span className="text-orange-300">{b.icon}</span> {b.label}
-            </motion.div>
+              <div className="aspect-square bg-white p-2 flex items-center justify-center">
+                <img
+                  src={thumbUrl(c.img, 300)}
+                  alt={c.name}
+                  width={144}
+                  height={144}
+                  loading="eager"
+                  decoding="async"
+                  className="h-full w-full object-cover rounded-xl transition-transform duration-300 group-hover:scale-105"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-1 px-3 py-2.5 bg-gradient-to-r from-purple-50 to-white border-t border-slate-100">
+                <span className="text-xs font-bold text-slate-800 leading-tight">{c.name}</span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-purple-400 group-hover:text-orange-500 transition" />
+              </div>
+            </motion.button>
           ))}
         </div>
       </motion.div>
