@@ -23,12 +23,11 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const SRC_DIR = process.env.CSV_DIR || 'E:/';
 const RATES = { USD: Number(process.env.USD || 42), EUR: Number(process.env.EUR || 45), UAH: 1 };
 
-// Наценка зависит от долларовой стоимости товара:
-//  ≥ $1000 → +10%, ≥ $500 → +20%, иначе → +50%
-function markupFor(baseUSD) {
-  if (baseUSD >= 1000) return 1.1;
-  if (baseUSD >= 500) return 1.2;
-  return 1.5;
+// Цена: базовая стоимость в гривнах +50%, но сама наценка не больше 1000 грн.
+const MARKUP_CAP_UAH = 1000;
+function priceFor(baseUAH) {
+  const markup = Math.min(baseUAH * 0.5, MARKUP_CAP_UAH);
+  return Math.round(baseUAH + markup);
 }
 
 const SUPABASE_URL = 'https://vhvedefyixgluayqahhh.supabase.co';
@@ -72,8 +71,19 @@ function parseCSV(text) {
 }
 
 // ─── Чтение всех прайсов ────────────────────────────────────
-const files = readdirSync(SRC_DIR).filter(f => /^dd_price_.*\.csv$/i.test(f));
-console.log(`Найдено файлов: ${files.length}`);
+// В папке могут лежать и старые, и новые выгрузки одного прайса
+// (dd_price_<name>_<timestamp>.csv). Берём только новейший таймстамп каждого прайса.
+const allFiles = readdirSync(SRC_DIR).filter(f => /^dd_price_.*\.csv$/i.test(f));
+const newest = new Map(); // base → { ts, file }
+for (const f of allFiles) {
+  const m = f.match(/^(dd_price_.*)_(\d+)\.csv$/i);
+  const base = m ? m[1] : f;
+  const ts = m ? Number(m[2]) : 0;
+  const prev = newest.get(base);
+  if (!prev || ts > prev.ts) newest.set(base, { ts, file: f });
+}
+const files = [...newest.values()].map(v => v.file);
+console.log(`Файлов в папке: ${allFiles.length}, взято новейших прайсов: ${files.length}`);
 
 const groups = new Map(); // key = категория||артикул
 
@@ -115,8 +125,8 @@ for (const file of files) {
 const products = [];
 for (const g of groups.values()) {
   const rate = RATES[g.valuta] ?? 1;
-  const baseUSD = (g.cena * rate) / RATES.USD; // долларовый эквивалент себестоимости
-  const price = Math.round(g.cena * rate * markupFor(baseUSD));
+  const baseUAH = g.cena * rate;
+  const price = priceFor(baseUAH);
   const compat = [...g.compat];
   products.push({
     name: g.name,
