@@ -17,6 +17,7 @@ import { useProductStructuredData } from './hooks/useProductStructuredData';
 import { CatalogMegaMenu, CATEGORY_ICONS, DEFAULT_ICON } from './components/CatalogMegaMenu';
 import { catalogTree } from './catalogTree';
 import { ChatWidget } from './components/ChatWidget';
+import { buildSearchFilters } from './lib/searchTranslate';
 
 // ─── Types ──────────────────────────────────────────────────
 interface Product {
@@ -679,7 +680,15 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     const start = (currentPage - 1) * PRODUCTS_PER_PAGE;
     let query = supabase.from('products').select('*', { count: 'exact' });
     if (isSearching) {
-      query = query.ilike('name', `%${searchQuery.trim()}%`);
+      // Пошук російською → знаходить товари з українськими назвами.
+      // Для кожного слова запиту шукаємо оригінал + укр. переклад
+      // + транслітерацію (OR усередині слова, AND між словами).
+      const filters = buildSearchFilters(searchQuery);
+      if (filters.length > 0) {
+        for (const orFilter of filters) query = query.or(orFilter);
+      } else {
+        query = query.ilike('name', `%${searchQuery.trim()}%`);
+      }
     } else {
       if (selectedCategory !== 'Усі') query = query.eq('category', selectedCategory);
       if (selectedSubcategory) query = query.eq('subcategory', selectedSubcategory);
