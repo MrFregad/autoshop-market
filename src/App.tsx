@@ -712,12 +712,14 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
   useEffect(() => {
     if (activeProductId) {
-      const current = products.find(p => p.id === activeProductId);
+      // Товар може прийти зі списку каталогу АБО окремим запитом (пряме посилання)
+      const current = products.find(p => p.id === activeProductId)
+        || (directProduct?.id === activeProductId ? directProduct : null);
       if (current && current.images && current.images.length > 0) {
         setSelectedReviewImage(current.images[0]);
       }
     }
-  }, [activeProductId, products]);
+  }, [activeProductId, products, directProduct]);
 
   // Прокрутка вверх при смене товара (в т.ч. при заходе по прямой ссылке)
   useEffect(() => {
@@ -1479,13 +1481,13 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 <div className="flex-1 aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center max-h-[460px] relative">
                   {currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
                   <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />
-                  <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={thumbUrl(firstImg([selectedReviewImage].filter(Boolean), currentProduct.category) || firstImg(currentProduct.images, currentProduct.category), 800)} alt="" className="w-full h-full object-contain" onError={imgError(currentProduct.category)} />
+                  <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={thumbUrl(selectedReviewImage || firstImg(currentProduct.images, currentProduct.category), 800)} alt="" className="w-full h-full object-contain" onError={imgError(currentProduct.category)} />
                 </div>
               </div>
               <div className="sm:hidden aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center relative">
                 {currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
                 <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />
-                <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={thumbUrl(firstImg([selectedReviewImage].filter(Boolean), currentProduct.category) || firstImg(currentProduct.images, currentProduct.category), 800)} alt="" className="w-full h-full object-contain" onError={imgError(currentProduct.category)} />
+                <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={thumbUrl(selectedReviewImage || firstImg(currentProduct.images, currentProduct.category), 800)} alt="" className="w-full h-full object-contain" onError={imgError(currentProduct.category)} />
               </div>
             </div>
 
