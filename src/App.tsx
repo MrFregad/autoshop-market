@@ -8,7 +8,8 @@ import {
   Zap, Headphones, Percent, Tag,
   TruckIcon, Wallet, FileText, MessageCircle, Link2, Check,
   Battery, SprayCan, Layers, DoorOpen, Lightbulb, Sparkles,
-  CarFront, Armchair, Wind
+  CarFront, Armchair, Wind, ShieldCheck, RotateCcw, BadgeCheck,
+  HelpCircle, ChevronDown, PhoneCall, ClipboardList, Package
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
@@ -223,6 +224,7 @@ const InfoTabs = () => {
   const tabs = [
     { id: 'delivery', label: 'Доставка', icon: <TruckIcon className="w-4 h-4" />, color: 'purple' },
     { id: 'payment', label: 'Оплата', icon: <Wallet className="w-4 h-4" />, color: 'emerald' },
+    { id: 'returns', label: 'Гарантія та повернення', icon: <RotateCcw className="w-4 h-4" />, color: 'rose' },
     { id: 'contacts', label: 'Контакти', icon: <Headphones className="w-4 h-4" />, color: 'sky' },
     { id: 'terms', label: 'Умови', icon: <FileText className="w-4 h-4" />, color: 'amber' },
   ];
@@ -230,6 +232,7 @@ const InfoTabs = () => {
   const colorMap: Record<string, { activeBg: string; activeText: string; ring: string }> = {
     purple: { activeBg: 'bg-purple-600', activeText: 'text-white', ring: 'ring-purple-200' },
     emerald: { activeBg: 'bg-emerald-600', activeText: 'text-white', ring: 'ring-emerald-200' },
+    rose: { activeBg: 'bg-rose-600', activeText: 'text-white', ring: 'ring-rose-200' },
     sky: { activeBg: 'bg-sky-600', activeText: 'text-white', ring: 'ring-sky-200' },
     amber: { activeBg: 'bg-amber-600', activeText: 'text-white', ring: 'ring-amber-200' },
   };
@@ -261,8 +264,8 @@ const InfoTabs = () => {
         </div>
 
         {/* Tab content */}
+        {/* Без AnimatePresence mode="wait": exit-анімація не завершувалась і вкладки не перемикались */}
         <div className="p-5 border-t">
-          <AnimatePresence mode="wait">
             {activeTab === 'delivery' && (
               <motion.div key="delivery" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
                 <div className="flex items-start gap-3">
@@ -322,6 +325,40 @@ const InfoTabs = () => {
               </motion.div>
             )}
 
+            {activeTab === 'returns' && (
+              <motion.div key="returns" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-700">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900">Гарантія на всі товари та повернення протягом 14 днів</h4>
+                    <p className="mt-1 text-xs text-slate-500 leading-5">Працюємо згідно з Законом України «Про захист прав споживачів».</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4">
+                    <h5 className="text-sm font-bold text-rose-900 flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-rose-600" /> Гарантія виробника</h5>
+                    <p className="mt-2 text-xs text-slate-600 leading-5">На всі товари діє офіційна гарантія виробника. Перед відправленням кожне замовлення перевіряється на комплектність.</p>
+                  </div>
+                  <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4">
+                    <h5 className="text-sm font-bold text-rose-900 flex items-center gap-2"><RotateCcw className="h-4 w-4 text-rose-600" /> Обмін та повернення — 14 днів</h5>
+                    <p className="mt-2 text-xs text-slate-600 leading-5">Якщо товар не підійшов — поверніть або обміняйте його протягом 14 днів з моменту отримання. Товар має бути без слідів використання, у повній комплектації та зі збереженою упаковкою.</p>
+                  </div>
+                </div>
+                <div className="rounded-xl bg-slate-50 border p-4">
+                  <h5 className="text-sm font-bold text-slate-900 mb-2">Як оформити повернення</h5>
+                  <ol className="space-y-1.5 text-xs text-slate-600 leading-5 list-none">
+                    <li className="flex gap-2"><span className="font-black text-rose-600 shrink-0">1.</span>Зателефонуйте нам за номером 097-602-0714 або напишіть у чат на сайті.</li>
+                    <li className="flex gap-2"><span className="font-black text-rose-600 shrink-0">2.</span>Узгодимо з вами деталі повернення чи обміну.</li>
+                    <li className="flex gap-2"><span className="font-black text-rose-600 shrink-0">3.</span>Надішліть товар «Новою Поштою» на узгоджену адресу.</li>
+                    <li className="flex gap-2"><span className="font-black text-rose-600 shrink-0">4.</span>Після отримання та перевірки повернемо кошти або відправимо заміну.</li>
+                  </ol>
+                </div>
+                <p className="text-xs text-slate-500">Якщо товар прийшов пошкодженим або не відповідає замовленню — вартість зворотної доставки ми беремо на себе.</p>
+              </motion.div>
+            )}
+
             {activeTab === 'contacts' && (
               <motion.div key="contacts" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -372,7 +409,184 @@ const InfoTabs = () => {
                 <p className="text-xs text-slate-500">Отримати замовлення необхідно протягом 5 днів з моменту прибуття.</p>
               </motion.div>
             )}
-          </AnimatePresence>
+        </div>
+      </div>
+    </motion.section>
+  );
+};
+
+// ─── Trust Badges (переваги магазину) ───────────────────────
+const trustBadges = [
+  { icon: <ShieldCheck className="h-5 w-5" />, title: 'Гарантія на всі товари', text: 'Офіційна гарантія виробника на кожну позицію каталогу' },
+  { icon: <RotateCcw className="h-5 w-5" />, title: 'Повернення 14 днів', text: 'Обмін або повернення згідно з законом про захист прав споживачів' },
+  { icon: <PackageCheck className="h-5 w-5" />, title: 'Перевірка при отриманні', text: 'Оглядайте товар у відділенні перед оплатою — платите тільки якщо все гаразд' },
+  { icon: <Headphones className="h-5 w-5" />, title: 'Жива підтримка', text: 'Телефон, чат на сайті — реальні менеджери відповідають щодня' },
+];
+
+const TrustBadges = () => (
+  <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn} className="mt-8">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {trustBadges.map((b) => (
+        <div key={b.title} className="bg-white border rounded-2xl p-4 flex items-start gap-3 hover:shadow-md transition-shadow">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700">{b.icon}</div>
+          <div>
+            <h3 className="text-xs font-black text-slate-900">{b.title}</h3>
+            <p className="mt-1 text-[11px] text-slate-500 leading-4">{b.text}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </motion.section>
+);
+
+// ─── How We Work (етапи замовлення) ─────────────────────────
+const workSteps = [
+  { icon: <ClipboardList className="h-5 w-5" />, title: 'Ви оформлюєте замовлення', text: 'Через кошик на сайті, у чаті або за телефоном 097-602-0714 — як вам зручніше.' },
+  { icon: <PhoneCall className="h-5 w-5" />, title: 'Ми підтверджуємо наявність', text: 'Менеджер зв’язується з вами, звіряє модель авто та сумісність товару, узгоджує доставку.' },
+  { icon: <Package className="h-5 w-5" />, title: 'Відправляємо замовлення', text: 'Пакуємо, перевіряємо комплектність і передаємо «Новій Пошті» або «Укрпошті». Відправки Пн-Сб.' },
+  { icon: <BadgeCheck className="h-5 w-5" />, title: 'Ви отримуєте та перевіряєте', text: 'Оглядаєте товар у відділенні й оплачуєте тільки після перевірки. Щось не так — оформимо повернення.' },
+];
+
+const HowWeWork = () => (
+  <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn} className="mt-6">
+    <div className="bg-white border rounded-2xl p-6 sm:p-8">
+      <h2 className="text-lg font-black text-slate-900 mb-1">Як ми працюємо</h2>
+      <p className="text-xs text-slate-500 mb-5">Простий і прозорий процес — від замовлення до отримання</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {workSteps.map((s, i) => (
+          <div key={s.title} className="relative rounded-xl border bg-slate-50/60 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-600 text-white shadow-sm">{s.icon}</div>
+              <span className="text-2xl font-black text-purple-200">0{i + 1}</span>
+            </div>
+            <h3 className="text-xs font-black text-slate-900">{s.title}</h3>
+            <p className="mt-1.5 text-[11px] text-slate-500 leading-4">{s.text}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </motion.section>
+);
+
+// ─── Store Reviews (останні відгуки покупців) ───────────────
+const StoreReviews = ({ reviews, onOpenProduct }: { reviews: Review[]; onOpenProduct: (id: number) => void }) => {
+  // Останні відгуки з бази — реальні, з прив'язкою до товару
+  const latest = useMemo(
+    () => [...reviews].sort((a, b) => b.id - a.id).slice(0, 6),
+    [reviews]
+  );
+  if (latest.length === 0) return null;
+  const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
+  return (
+    <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn} className="mt-6">
+      <div className="bg-white border rounded-2xl p-6 sm:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <div>
+            <h2 className="text-lg font-black text-slate-900">Відгуки наших покупців</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Справжні відгуки, залишені на сторінках товарів</p>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2">
+            <div className="flex text-amber-400">
+              {[...Array(5)].map((_, i) => <Star key={i} className={`h-4 w-4 ${i < Math.round(avg) ? 'fill-current' : ''}`} />)}
+            </div>
+            <span className="text-sm font-black text-slate-900">{avg.toFixed(1)}</span>
+            <span className="text-xs text-slate-500">· {reviews.length} відгуків</span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {latest.map((rev) => (
+            <button
+              key={rev.id}
+              onClick={() => onOpenProduct(rev.product_id)}
+              className="text-left rounded-xl border bg-slate-50/60 p-4 hover:shadow-md hover:border-purple-200 transition"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-slate-800">{rev.author}</span>
+                <span className="text-[10px] text-slate-400">{rev.date}</span>
+              </div>
+              <div className="flex text-amber-400 mb-1.5">
+                {[...Array(rev.rating)].map((_, i) => <Star key={i} className="h-3 w-3 fill-current" />)}
+              </div>
+              <p className="text-xs text-slate-600 leading-5 line-clamp-3">{rev.text}</p>
+              <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600">
+                Переглянути товар <ChevronRight className="h-3 w-3" />
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </motion.section>
+  );
+};
+
+// ─── FAQ (часті питання) ────────────────────────────────────
+const faqItems = [
+  {
+    q: 'Як оформити замовлення?',
+    a: 'Додайте товар у кошик і заповніть коротку форму — ім’я, телефон та відділення доставки. Також можна замовити за телефоном 097-602-0714 або написати в онлайн-чат на сайті. Після оформлення менеджер зв’яжеться з вами для підтвердження.',
+  },
+  {
+    q: 'Як підібрати товар під моє авто?',
+    a: 'Напишіть у чат на сайті марку, модель, рік випуску та кузов вашого авто — менеджер підбере сумісні варіанти. Це безкоштовно та ні до чого не зобов’язує. Так ви уникнете помилки з посадкою і кріпленнями.',
+  },
+  {
+    q: 'Які способи оплати доступні?',
+    a: 'Оплата при отриманні у відділенні: готівкою або карткою (накладений платіж). Комісія перевізника за накладений платіж: Нова Пошта — 1.8%, Укрпошта — 2%. Ви оглядаєте товар перед оплатою.',
+  },
+  {
+    q: 'Скільки коштує та скільки триває доставка?',
+    a: 'Доставка «Новою Поштою» та «Укрпоштою» по всій Україні, зазвичай 1-3 дні. Вартість — за тарифами перевізника. При замовленні від 2000 ₴ доставка безкоштовна. Відправляємо з понеділка по суботу.',
+  },
+  {
+    q: 'Чи можна повернути або обміняти товар?',
+    a: 'Так, протягом 14 днів з моменту отримання — згідно з Законом України «Про захист прав споживачів». Товар має бути без слідів використання та зі збереженою упаковкою. Зателефонуйте або напишіть нам — узгодимо повернення.',
+  },
+  {
+    q: 'Що робити, якщо товар прийшов пошкодженим?',
+    a: 'Обов’язково перевіряйте товар у відділенні при отриманні. Якщо є пошкодження — відмовтеся від посилки та одразу повідомте нас за номером 097-602-0714. Ми відправимо заміну або повернемо кошти, зворотну доставку оплачуємо ми.',
+  },
+];
+
+const FAQItem = ({ item, isOpen, onToggle }: { item: { q: string; a: string }; isOpen: boolean; onToggle: () => void }) => (
+  <div className="border rounded-xl overflow-hidden bg-white">
+    <button onClick={onToggle} className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-slate-50 transition">
+      <span className="text-xs sm:text-sm font-bold text-slate-800">{item.q}</span>
+      <ChevronDown className={`h-4 w-4 shrink-0 text-purple-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+    </button>
+    <AnimatePresence initial={false}>
+      {isOpen && (
+        <motion.div
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          className="overflow-hidden"
+        >
+          <p className="px-4 pb-4 text-xs text-slate-600 leading-5">{item.a}</p>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  </div>
+);
+
+const FAQSection = () => {
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  return (
+    <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn} className="mt-6">
+      <div className="bg-white border rounded-2xl p-6 sm:p-8">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-700">
+            <HelpCircle className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-lg font-black text-slate-900">Часті питання</h2>
+            <p className="text-xs text-slate-500">Відповіді на те, про що запитують найчастіше</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {faqItems.map((item, i) => (
+            <FAQItem key={i} item={item} isOpen={openIndex === i} onToggle={() => setOpenIndex(openIndex === i ? null : i)} />
+          ))}
         </div>
       </div>
     </motion.section>
@@ -1430,20 +1644,83 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             </motion.section>
             )}
 
+            {/* Блоки довіри — тільки на головній */}
+            {!showProducts && (
+              <>
+                <TrustBadges />
+                <HowWeWork />
+                <StoreReviews reviews={reviews} onOpenProduct={(id) => setActiveProductId(id)} />
+                <FAQSection />
+              </>
+            )}
+
             {/* Info Tabs — внизу, під текстом опису */}
             <InfoTabs />
 
             {/* Footer */}
-            <footer className="mt-10 border-t pt-6 pb-8 text-center">
-              <div className="flex items-center justify-center gap-2 mb-3">
-                <span className="text-lg font-black text-purple-700">AUTO<span className="text-orange-500">SHOP</span></span>
+            <footer className="mt-10 border-t pt-8 pb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
+                <div>
+                  <span className="text-lg font-black text-purple-700">AUTO<span className="text-orange-500">SHOP</span></span>
+                  <p className="mt-2 text-xs text-slate-500 leading-5">
+                    Інтернет-магазин автоаксесуарів і тюнінгу з модельним підбором під конкретне авто.
+                    Понад 65 000 товарів у 24 категоріях з доставкою по всій Україні.
+                  </p>
+                  <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Гарантія та повернення 14 днів
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Покупцям</h4>
+                  <ul className="space-y-2 text-xs text-slate-600">
+                    <li>Доставка «Новою Поштою» та «Укрпоштою»</li>
+                    <li>Оплата при отриманні — готівка або картка</li>
+                    <li>Безкоштовна доставка від 2 000 ₴</li>
+                    <li>Обмін та повернення протягом 14 днів</li>
+                    <li>Перевірка товару перед оплатою</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Графік роботи</h4>
+                  <ul className="space-y-2 text-xs text-slate-600">
+                    <li className="flex justify-between max-w-[200px]"><span>Пн - Пт</span><span className="font-semibold">08:00 - 21:00</span></li>
+                    <li className="flex justify-between max-w-[200px]"><span>Субота</span><span className="font-semibold">09:00 - 19:00</span></li>
+                    <li className="flex justify-between max-w-[200px]"><span>Неділя</span><span className="font-semibold">09:00 - 18:00</span></li>
+                    <li className="text-[11px] text-slate-400 pt-1">Відправлення замовлень: Пн - Сб</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Контакти</h4>
+                  <ul className="space-y-2.5 text-xs">
+                    <li>
+                      <a href="tel:0976020714" className="flex items-center gap-2 text-slate-700 hover:text-purple-600 transition font-bold">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><Phone className="w-3.5 h-3.5" /></span>
+                        097-602-0714
+                      </a>
+                    </li>
+                    <li>
+                      <a href="mailto:dneprogorb777@gmail.com" className="flex items-center gap-2 text-slate-600 hover:text-purple-600 transition break-all">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><Mail className="w-3.5 h-3.5" /></span>
+                        dneprogorb777@gmail.com
+                      </a>
+                    </li>
+                    <li>
+                      <button onClick={() => window.dispatchEvent(new Event('open-chat-widget'))} className="flex items-center gap-2 text-slate-600 hover:text-purple-600 transition">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><MessageCircle className="w-3.5 h-3.5" /></span>
+                        Онлайн-чат на сайті
+                      </button>
+                    </li>
+                    <li className="flex items-center gap-2 text-slate-600">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><MapPin className="w-3.5 h-3.5" /></span>
+                      м. Дніпро, Україна
+                    </li>
+                  </ul>
+                </div>
               </div>
-              <p className="text-xs text-slate-500">AUTOSHOP-MARKET — ваш надійний автомобільний магазин</p>
-              <div className="flex items-center justify-center gap-4 mt-3">
-                <a href="tel:0976020714" className="text-xs text-slate-600 hover:text-purple-600 transition flex items-center gap-1"><Phone className="w-3 h-3" /> 097-602-0714</a>
-                <a href="mailto:dneprogorb777@gmail.com" className="text-xs text-slate-600 hover:text-purple-600 transition flex items-center gap-1"><Mail className="w-3 h-3" /> Email</a>
+              <div className="mt-8 border-t pt-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+                <p className="text-[10px] text-slate-400">© 2025 AUTOSHOP-MARKET. Всі права захищені.</p>
+                <p className="text-[10px] text-slate-400">Ціни на сайті вказані в гривнях з урахуванням усіх знижок.</p>
               </div>
-              <p className="text-[10px] text-slate-400 mt-4">© 2025 AUTOSHOP-MARKET. Всі права захищені.</p>
             </footer>
           </main>
         </>
