@@ -1,17 +1,25 @@
 // Адаптер Dropt Landing API.
 // ЕДИНСТВЕННОЕ место, где живут URL и формат (маппинг полей) запроса к Dropt.
-// Когда получим официальную документацию Landing API — правим только этот файл.
+//
+// Формат подтверждён опытным путём 2026-07-14 (проверка ответов эндпоинта):
+//   POST https://dropt.in.ua/index.php?route=api/landing/order
+//   {
+//     "token": "<API-токен из кабинета: Замовлення → Landing API>",
+//     "customer": { "name": "...", "phone": "...", ... },
+//     "items": [ { "sku": "<артикул vendorCode>", "quantity": 1 } ]
+//   }
+// Ответы: {"error": "..."} либо {"error": ["...", ...]} при проблеме;
+// при успехе — данные созданного заказа.
 //
 // Токен берётся ТОЛЬКО из переменной окружения DROPT_API_TOKEN (Vercel →
 // Settings → Environment Variables). В коде токена нет и быть не должно.
 //
 // Папка api/_lib не публикуется как endpoint (Vercel игнорирует пути с "_").
 
-// URL можно переопределить переменной окружения DROPT_API_URL —
-// пригодится, когда в документации будет точный адрес.
-// ВНИМАНИЕ: адрес ниже — предположительный, до получения доков от Dropt.
+// URL можно переопределить переменной окружения DROPT_API_URL (на всякий случай)
 const DROPT_API_URL =
-  process.env.DROPT_API_URL || 'https://dropt.in.ua/api/landing/order';
+  process.env.DROPT_API_URL ||
+  'https://dropt.in.ua/index.php?route=api/landing/order';
 
 /**
  * Отправляет заказ в Dropt. Никогда не бросает исключение —
@@ -41,20 +49,21 @@ export async function pushOrderToDropt(order) {
   }
 
   // ── МАППИНГ ПОЛЕЙ ─────────────────────────────────────────
-  // Предположительный формат. После получения доков Dropt
-  // корректируем названия полей ЗДЕСЬ и больше нигде.
+  // customer: обязательны name и phone; город/отделение передаём и в
+  // отдельных полях, и в comment — чтобы точно дошло до менеджера Dropt.
+  const deliveryNote = [order.city, order.npOffice].filter(Boolean).join(', ');
   const payload = {
     token,
-    name: order.name,
-    phone: order.phone,
-    city: order.city,
-    delivery: 'nova_poshta',
-    np_office: order.npOffice,
-    comment: order.comment || '',
-    products: droptItems.map((i) => ({
+    customer: {
+      name: order.name,
+      phone: order.phone,
+      city: order.city || '',
+      np_office: order.npOffice || '',
+      comment: [deliveryNote, order.comment || ''].filter(Boolean).join(' | '),
+    },
+    items: droptItems.map((i) => ({
       sku: i.supplier_sku,
       quantity: i.quantity,
-      price: i.price,
     })),
   };
 
@@ -64,22 +73,26 @@ export async function pushOrderToDropt(order) {
     const timer = setTimeout(() => controller.abort(), 10_000);
     const resp = await fetch(DROPT_API_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
     clearTimeout(timer);
 
     const text = await resp.text();
+    let data = {};
+    try { data = JSON.parse(text); } catch { /* ответ не JSON */ }
+
+    // Dropt сообщает об ошибках полем "error" (строка или массив строк)
+    if (data.error) {
+      const msg = Array.isArray(data.error) ? data.error.join('; ') : String(data.error);
+      return { status: 'error', detail: msg.slice(0, 300) };
+    }
     if (!resp.ok) {
       return { status: 'error', detail: `HTTP ${resp.status}: ${text.slice(0, 300)}` };
     }
-    let data = {};
-    try { data = JSON.parse(text); } catch { /* ответ не JSON — не страшно */ }
-    const droptOrderId = String(data.order_id ?? data.id ?? '') || undefined;
+    const droptOrderId =
+      String(data.order_id ?? data.id ?? data.order?.id ?? '') || undefined;
     return { status: 'sent', droptOrderId, detail: text.slice(0, 300) };
   } catch (err) {
     return { status: 'error', detail: String(err?.message || err) };
