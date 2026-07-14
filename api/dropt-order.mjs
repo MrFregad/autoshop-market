@@ -8,13 +8,13 @@
 // (переменная окружения Vercel) — иначе любой мог бы создавать
 // заказы у поставщика от нашего имени.
 
-import { pushOrderToDropt } from './_lib/droptAdapter';
+import { pushOrderToDropt } from './_lib/droptAdapter.mjs';
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || 'https://vhvedefyixgluayqahhh.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }

@@ -5,31 +5,7 @@
 // Токен берётся ТОЛЬКО из переменной окружения DROPT_API_TOKEN (Vercel →
 // Settings → Environment Variables). В коде токена нет и быть не должно.
 //
-// Папка api/_lib не публикуется как endpoint (Vercel игнорирует файлы,
-// чей путь начинается с "_").
-
-export interface DroptOrderItem {
-  name: string;
-  quantity: number;
-  price: number;
-  supplier?: string | null;      // 'dropt' | null (свой склад)
-  supplier_sku?: string | null;  // артикул Dropt (vendorCode)
-}
-
-export interface DroptOrderInput {
-  name: string;      // ФИО покупателя
-  phone: string;
-  city: string;      // город доставки
-  npOffice: string;  // отделение Новой Почты
-  comment?: string;
-  items: DroptOrderItem[];
-}
-
-export interface DroptPushResult {
-  status: 'sent' | 'skipped' | 'error';
-  droptOrderId?: string; // id заказа в Dropt (если создан)
-  detail?: string;       // текст ошибки или ответа — для логов
-}
+// Папка api/_lib не публикуется как endpoint (Vercel игнорирует пути с "_").
 
 // URL можно переопределить переменной окружения DROPT_API_URL —
 // пригодится, когда в документации будет точный адрес.
@@ -40,11 +16,17 @@ const DROPT_API_URL =
 /**
  * Отправляет заказ в Dropt. Никогда не бросает исключение —
  * любая проблема возвращается как { status: 'error' | 'skipped' },
- * чтобы ошибка Dropt не сломала оформление заказа на сайте.
+ * чтобы сбой Dropt не сломал оформление заказа на сайте.
+ *
+ * @param {{
+ *   name: string, phone: string, city: string, npOffice: string,
+ *   comment?: string,
+ *   items: Array<{ name: string, quantity: number, price: number,
+ *                  supplier?: string|null, supplier_sku?: string|null }>
+ * }} order
+ * @returns {Promise<{ status: 'sent'|'skipped'|'error', droptOrderId?: string, detail?: string }>}
  */
-export async function pushOrderToDropt(
-  order: DroptOrderInput
-): Promise<DroptPushResult> {
+export async function pushOrderToDropt(order) {
   const token = process.env.DROPT_API_TOKEN;
   if (!token) {
     return { status: 'skipped', detail: 'DROPT_API_TOKEN не задан' };
@@ -95,11 +77,11 @@ export async function pushOrderToDropt(
     if (!resp.ok) {
       return { status: 'error', detail: `HTTP ${resp.status}: ${text.slice(0, 300)}` };
     }
-    let data: Record<string, unknown> = {};
+    let data = {};
     try { data = JSON.parse(text); } catch { /* ответ не JSON — не страшно */ }
     const droptOrderId = String(data.order_id ?? data.id ?? '') || undefined;
     return { status: 'sent', droptOrderId, detail: text.slice(0, 300) };
   } catch (err) {
-    return { status: 'error', detail: String((err as Error)?.message || err) };
+    return { status: 'error', detail: String(err?.message || err) };
   }
 }

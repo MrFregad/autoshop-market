@@ -6,8 +6,11 @@
 //   3. Передаёт товары Dropt поставщику через Landing API (адаптер).
 // Ошибки шагов 2 и 3 НЕ блокируют оформление: заказ уже у владельца в Telegram,
 // проблемы только логируются (Vercel → Functions → Logs).
+//
+// Единственный локальный импорт — адаптер Dropt (с явным расширением .mjs,
+// иначе функция падает на Vercel при "type":"module").
 
-import { pushOrderToDropt } from './_lib/droptAdapter';
+import { pushOrderToDropt } from './_lib/droptAdapter.mjs';
 
 const TELEGRAM_BOT_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN ||
@@ -22,15 +25,7 @@ const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZodmVkZWZ5aXhnbHVheXFhaGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzE0OTEsImV4cCI6MjA5NjY0NzQ5MX0.RMK8MjUTTOO4slWV5kQw5ue7oAkUQyBFhaXhqz3FGtM';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 
-interface IncomingItem { id?: number | null; name: string; quantity: number; price: number }
-interface ProductRow {
-  id: number;
-  supplier: string | null;
-  supplier_sku: string | null;
-  supplier_url: string | null;
-}
-
-function sbHeaders(key: string) {
+function sbHeaders(key) {
   return {
     apikey: key,
     Authorization: `Bearer ${key}`,
@@ -38,14 +33,14 @@ function sbHeaders(key: string) {
   };
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
   const { name, phone, address, city, npOffice, items } = req.body ?? {};
 
-  const str = (v: unknown, max: number) =>
+  const str = (v, max) =>
     typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
   const orderName = str(name, 100);
   const orderPhone = str(phone, 30);
@@ -63,7 +58,7 @@ export default async function handler(req: any, res: any) {
     return res.status(400).json({ ok: false, error: 'Invalid items' });
   }
 
-  const safeItems: Array<IncomingItem & { id: number | null }> = [];
+  const safeItems = [];
   for (const it of items) {
     const itemName = str(it?.name, 300);
     const quantity = Number(it?.quantity);
@@ -80,8 +75,8 @@ export default async function handler(req: any, res: any) {
   }
 
   // ── Поставщик каждого товара: берём из базы, а не с клиента ──
-  const supplierById = new Map<number, ProductRow>();
-  const ids = safeItems.map((i) => i.id).filter((v): v is number => v !== null);
+  const supplierById = new Map();
+  const ids = safeItems.map((i) => i.id).filter((v) => v !== null);
   if (ids.length > 0) {
     try {
       const resp = await fetch(
@@ -89,7 +84,7 @@ export default async function handler(req: any, res: any) {
         { headers: sbHeaders(SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY) }
       );
       if (resp.ok) {
-        const rows: ProductRow[] = await resp.json();
+        const rows = await resp.json();
         for (const r of rows) supplierById.set(r.id, r);
       }
     } catch (err) {
@@ -133,7 +128,7 @@ export default async function handler(req: any, res: any) {
     `Товари:\n${itemsText}\n\n💰 Разом: ${total} ₴`;
 
   // ── 2. Сохраняем заказ в Supabase (не блокирует) ──────────
-  let orderId: number | null = null;
+  let orderId = null;
   if (SUPABASE_SERVICE_KEY) {
     try {
       const resp = await fetch(`${SUPABASE_URL}/rest/v1/orders`, {

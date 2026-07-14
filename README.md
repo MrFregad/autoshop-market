@@ -58,7 +58,7 @@
    в Telegram придёт пометка «⚠️ Dropt: ПОМИЛКА передачі», а в `orders`
    останется `dropt_status = 'error'`.
 
-Формат запроса к Dropt целиком живёт в [`api/_lib/droptAdapter.ts`](api/_lib/droptAdapter.ts) —
+Формат запроса к Dropt целиком живёт в [`api/_lib/droptAdapter.mjs`](api/_lib/droptAdapter.mjs) —
 когда придёт документация Landing API, правится только этот файл (и при
 необходимости переменная `DROPT_API_URL`).
 
