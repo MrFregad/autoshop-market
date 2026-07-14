@@ -64,6 +64,9 @@ export async function pushOrderToDropt(order) {
     items: droptItems.map((i) => ({
       sku: i.supplier_sku,
       quantity: i.quantity,
+      // Розничная цена сайта: Dropt по ней считает прибыль владельца
+      // (перевіренo: profit = price - дроп-цена в ответе API)
+      price: i.price,
     })),
   };
 
