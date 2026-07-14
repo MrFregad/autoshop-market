@@ -1,0 +1,37 @@
+# Автоматический импорт товаров Dropt: цены и наличие обновляются раз в сутки.
+# Ручной запуск: GitHub → Actions → «Dropt: імпорт товарів» → Run workflow.
+#
+# Нужны секреты репозитория (GitHub → Settings → Secrets and variables → Actions):
+#   DROPT_FEED_URL       — персональная ссылка на XML-фид из кабинета Dropt
+#   SUPABASE_SERVICE_KEY — service-ключ Supabase (Settings → API → service_role)
+
+name: 'Dropt: імпорт товарів'
+
+on:
+  schedule:
+    # Каждый день в 03:30 UTC (06:30 по Киеву летом)
+    - cron: '30 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Скрипту нужен только @supabase/supabase-js — ставим все deps проекта
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Import Dropt products
+        env:
+          DROPT_FEED_URL: ${{ secrets.DROPT_FEED_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/dropt-import.mjs

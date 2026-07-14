@@ -1,73 +1,100 @@
-# React + TypeScript + Vite
+# AUTOSHOP-MARKET
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Интернет-магазин автозапчастей: React + Vite + TypeScript + Tailwind, база — Supabase, хостинг — Vercel. Заказы приходят владельцу в Telegram; товары поставщика Dropt заказываются у него автоматически.
 
-Currently, two official plugins are available:
+Дополнительные инструкции: [CHAT_SETUP.md](CHAT_SETUP.md) (онлайн-чат), [SECURITY_SETUP.md](SECURITY_SETUP.md) (секреты).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+---
 
-## React Compiler
+## Интеграция с Dropt (dropt.in.ua)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Разовая настройка
 
-## Expanding the ESLint configuration
+1. **SQL-миграция** (один раз): Supabase → SQL Editor → вставить содержимое
+   [`supabase/dropt_migration.sql`](supabase/dropt_migration.sql) → Run.
+   Добавляет в `products` поля `supplier`, `supplier_sku`, `supplier_url`, `available`
+   и создаёт таблицу `orders`.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+2. **Переменные в Vercel**: Project → Settings → Environment Variables → добавить:
+   | Имя | Что это |
+   |---|---|
+   | `DROPT_API_TOKEN` | токен Landing API из кабинета Dropt |
+   | `DROPT_API_URL` | точный адрес Landing API (когда придёт документация; пока можно не задавать) |
+   | `SUPABASE_SERVICE_KEY` | Supabase → Settings → API → `service_role` (если ещё не добавлен) |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+   После добавления переменных нажать **Redeploy**, иначе функции их не увидят.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+3. **Секреты в GitHub** (для автообновления товаров): репозиторий → Settings →
+   Secrets and variables → Actions → New repository secret:
+   - `DROPT_FEED_URL` — персональная ссылка на XML-фид из кабинета Dropt
+     (*Налаштування → Prom.ua*, наценка **0%**);
+   - `SUPABASE_SERVICE_KEY` — тот же service-ключ.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Импорт товаров
+
+- **Автоматически**: GitHub Actions запускает импорт каждый день в 06:30 по Киеву
+  (workflow «Dropt: імпорт товарів»). Обновляются цены и наличие; товары,
+  пропавшие из фида, помечаются «немає в наявності» (не удаляются).
+- **Вручную через GitHub**: Actions → «Dropt: імпорт товарів» → Run workflow.
+- **Вручную на компьютере** (значения переменных — в локальном `.env`):
+  ```bash
+  # проверка без записи в базу:
+  DROPT_FEED_URL="..." node scripts/dropt-import.mjs --dry-run
+  # боевой запуск:
+  DROPT_FEED_URL="..." SUPABASE_SERVICE_KEY="..." node scripts/dropt-import.mjs
+  ```
+
+Цена продажи = цена дропа **+50%, но наценка не больше 1000 грн** (то же правило,
+что и у остальных товаров). Соответствие категорий Dropt → категории сайта правится
+в файле [`scripts/dropt-category-map.json`](scripts/dropt-category-map.json).
+
+### Передача заказов в Dropt
+
+Покупатель оформляет заказ на сайте → `/api/order`:
+1. отправляет заказ в Telegram (у каждого товара указано, с какого он сайта:
+   `dropt.in.ua` со ссылкой и артикулом — или «власний склад»);
+2. сохраняет заказ в таблицу `orders`;
+3. товары Dropt передаёт в их Landing API. Ошибка Dropt **не блокирует** заказ —
+   в Telegram придёт пометка «⚠️ Dropt: ПОМИЛКА передачі», а в `orders`
+   останется `dropt_status = 'error'`.
+
+Формат запроса к Dropt целиком живёт в [`api/_lib/droptAdapter.ts`](api/_lib/droptAdapter.ts) —
+когда придёт документация Landing API, правится только этот файл (и при
+необходимости переменная `DROPT_API_URL`).
+
+### Тест эндпоинта вручную (curl)
+
+`/api/dropt-order` — повторная/ручная отправка заказа в Dropt. Защищён паролем
+админки (заголовок `x-admin-key` = переменная `ADMIN_PASSWORD` в Vercel):
+
+```bash
+curl -X POST https://ВАШ-САЙТ.vercel.app/api/dropt-order \
+  -H "Content-Type: application/json" \
+  -H "x-admin-key: ПАРОЛЬ_АДМИНКИ" \
+  -d '{
+    "name": "Тест Тестович",
+    "phone": "+380971234567",
+    "city": "Дніпро",
+    "npOffice": "Відділення №1",
+    "orderId": 1,
+    "items": [
+      { "supplier": "dropt", "supplier_sku": "899279416",
+        "name": "Автомагнітола 2DIN 7621", "quantity": 1, "price": 2636 }
+    ]
+  }'
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Ответ: `{"ok":true,"status":"sent","droptOrderId":"..."}` — заказ создан у Dropt;
+`"status":"error"` — смотреть `detail` и логи Vercel (Functions → Logs).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+---
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Локальная разработка
+
+```bash
+npm install
+npm run dev      # сайт на http://localhost:5173 (api-функции работают только на Vercel)
+npm run build    # проверка сборки перед пушем
 ```
+
+Деплой: любой push в ветку `main` — Vercel собирает и публикует автоматически.

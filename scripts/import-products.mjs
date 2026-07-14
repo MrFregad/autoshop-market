@@ -176,6 +176,20 @@ for (const cat of sortedCats) {
     .filter(s => s !== '(без підкатегорії)')
     .sort((a, b) => a.localeCompare(b, 'uk'));
 }
+
+// Добавляем категории поставщика Dropt (scripts/dropt-category-map.json),
+// чтобы регенерация дерева из CSV не стирала их из меню сайта.
+try {
+  const droptMap = JSON.parse(readFileSync('scripts/dropt-category-map.json', 'utf8'));
+  for (const [key, m] of Object.entries(droptMap)) {
+    if (key.startsWith('_') || !m.category) continue;
+    catalogTree[m.category] ??= [];
+    if (m.subcategory && !catalogTree[m.category].includes(m.subcategory)) {
+      catalogTree[m.category].push(m.subcategory);
+      catalogTree[m.category].sort((a, b) => a.localeCompare(b, 'uk'));
+    }
+  }
+} catch { /* карты Dropt нет — пропускаем */ }
 writeFileSync('src/catalogTree.ts',
   `// АВТОГЕНЕРАЦИЯ скриптом scripts/import-products.mjs — не редактировать вручную.\n` +
   `export const catalogTree: Record<string, string[]> = ${JSON.stringify(catalogTree, null, 2)};\n`,

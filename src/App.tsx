@@ -35,6 +35,11 @@ interface Product {
   color?: string;
   description?: string;
   badge?: 'hot' | 'sale' | 'top' | 'new';
+  // Поля поставщика (заполняются импортом, у своих товаров пустые)
+  supplier?: string | null;      // 'dropt' — товар поставщика Dropt
+  supplier_sku?: string | null;  // артикул у поставщика
+  supplier_url?: string | null;  // ссылка на товар на сайте поставщика
+  available?: boolean;           // false — нет в наличии у поставщика
 }
 
 interface CartItem extends Product { quantity: number; }
@@ -855,7 +860,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [orderName, setOrderName] = useState('');
   const [orderPhone, setOrderPhone] = useState('');
-  const [orderAddress, setOrderAddress] = useState('');
+  const [orderCity, setOrderCity] = useState('');
+  const [orderNpOffice, setOrderNpOffice] = useState('');
   const [isSendingOrder, setIsSendingOrder] = useState(false);
 
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -892,24 +898,32 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const fetchProducts = async () => {
     setIsLoading(true);
     const start = (currentPage - 1) * PRODUCTS_PER_PAGE;
-    let query = supabase.from('products').select('*', { count: 'exact' });
-    if (isSearching) {
-      // Пошук російською → знаходить товари з українськими назвами.
-      // Для кожного слова запиту шукаємо оригінал + укр. переклад
-      // + транслітерацію (OR усередині слова, AND між словами).
-      const filters = buildSearchFilters(searchQuery);
-      if (filters.length > 0) {
-        for (const orFilter of filters) query = query.or(orFilter);
+    const buildQuery = (withAvailability: boolean) => {
+      let query = supabase.from('products').select('*', { count: 'exact' });
+      if (isSearching) {
+        // Пошук російською → знаходить товари з українськими назвами.
+        // Для кожного слова запиту шукаємо оригінал + укр. переклад
+        // + транслітерацію (OR усередині слова, AND між словами).
+        const filters = buildSearchFilters(searchQuery);
+        if (filters.length > 0) {
+          for (const orFilter of filters) query = query.or(orFilter);
+        } else {
+          query = query.ilike('name', `%${searchQuery.trim()}%`);
+        }
       } else {
-        query = query.ilike('name', `%${searchQuery.trim()}%`);
+        if (selectedCategory !== 'Усі') query = query.eq('category', selectedCategory);
+        if (selectedSubcategory) query = query.eq('subcategory', selectedSubcategory);
       }
-    } else {
-      if (selectedCategory !== 'Усі') query = query.eq('category', selectedCategory);
-      if (selectedSubcategory) query = query.eq('subcategory', selectedSubcategory);
-    }
-    const { data, count, error } = await query
-      .order('id', { ascending: false })
-      .range(start, start + PRODUCTS_PER_PAGE - 1);
+      // Товары без наличия у поставщика скрываем от покупателей (админ видит всё)
+      if (withAvailability && !isAdminMode) query = query.not('available', 'is', false);
+      return query
+        .order('id', { ascending: false })
+        .range(start, start + PRODUCTS_PER_PAGE - 1);
+    };
+    let { data, count, error } = await buildQuery(true);
+    // Если колонки available ещё нет в базе (миграция не выполнена) —
+    // повторяем запрос без фильтра, чтобы каталог не пустел
+    if (error) ({ data, count, error } = await buildQuery(false));
     if (!error && data) {
       setProducts(data as Product[]);
       setTotalCount(count ?? data.length);
@@ -951,6 +965,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
   // ─── Cart Logic ───────────────────────────────────────────
   const addToCart = (product: Product) => {
+    if (product.available === false) {
+      alert('На жаль, цього товару зараз немає в наявності.');
+      return;
+    }
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
@@ -1151,7 +1169,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   // ─── Order ────────────────────────────────────────────────
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orderName.trim() || !orderPhone.trim() || !orderAddress.trim()) { alert('Заповніть усі поля!'); return; }
+    if (!orderName.trim() || !orderPhone.trim() || !orderCity.trim() || !orderNpOffice.trim()) { alert('Заповніть усі поля!'); return; }
     if (cart.length === 0) { alert('Кошик порожній!'); return; }
 
     setIsSendingOrder(true);
@@ -1159,14 +1177,16 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       const response = await fetch('/api/order', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: orderName, phone: orderPhone, address: orderAddress,
-          items: cart.map(item => ({ name: item.name, quantity: item.quantity, price: item.price })),
+          name: orderName, phone: orderPhone,
+          city: orderCity, npOffice: orderNpOffice,
+          // id нужен серверу, чтобы определить поставщика товара (Dropt / свой склад)
+          items: cart.map(item => ({ id: item.id, name: item.name, quantity: item.quantity, price: item.price })),
         }),
       });
       const data = await response.json();
       if (data.ok) {
         alert('Дякуємо! Ваше замовлення прийнято!');
-        setCart([]); setOrderName(''); setOrderPhone(''); setOrderAddress('');
+        setCart([]); setOrderName(''); setOrderPhone(''); setOrderCity(''); setOrderNpOffice('');
         setIsCheckoutOpen(false); setIsCartOpen(false);
       } else { alert('Помилка відправки. Спробуйте ще раз.'); }
     } catch {
@@ -1813,14 +1833,20 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </div>
               </div>
               <div className="mt-2 space-y-2">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => addToCart(currentProduct)}
-                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2"
-                >
-                  <ShoppingCart className="h-5 w-5" /> Додати в кошик
-                </motion.button>
+                {currentProduct.available === false ? (
+                  <div className="w-full bg-slate-100 text-slate-500 py-3 rounded-xl font-bold text-center border border-slate-200">
+                    Немає в наявності
+                  </div>
+                ) : (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => addToCart(currentProduct)}
+                    className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2"
+                  >
+                    <ShoppingCart className="h-5 w-5" /> Додати в кошик
+                  </motion.button>
+                )}
                 <motion.button
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
@@ -1968,8 +1994,12 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   <input type="tel" value={orderPhone} onChange={e => setOrderPhone(e.target.value)} placeholder="+380 XX XXX XX XX" className="w-full p-2.5 border border-slate-300 rounded-xl bg-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 text-sm transition" required />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Адреса доставки *</label>
-                  <input type="text" value={orderAddress} onChange={e => setOrderAddress(e.target.value)} placeholder="м. Дніпро, відділення №1" className="w-full p-2.5 border border-slate-300 rounded-xl bg-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 text-sm transition" required />
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Місто *</label>
+                  <input type="text" value={orderCity} onChange={e => setOrderCity(e.target.value)} placeholder="м. Дніпро" className="w-full p-2.5 border border-slate-300 rounded-xl bg-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 text-sm transition" required />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Відділення Нової Пошти / Укрпошти *</label>
+                  <input type="text" value={orderNpOffice} onChange={e => setOrderNpOffice(e.target.value)} placeholder="Відділення №1" className="w-full p-2.5 border border-slate-300 rounded-xl bg-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 text-sm transition" required />
                 </div>
                 <div className="bg-slate-50 border rounded-xl p-3 text-xs space-y-1 max-h-32 overflow-y-auto">
                   {cart.map(item => (

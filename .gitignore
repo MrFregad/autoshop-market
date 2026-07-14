@@ -26,3 +26,5 @@ marketing/out/
 *.njsproj
 *.sln
 *.sw?
+
+dropt-import-preview.json
