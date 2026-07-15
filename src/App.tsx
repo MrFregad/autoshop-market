@@ -40,6 +40,11 @@ interface Product {
   supplier_sku?: string | null;  // артикул у поставщика
   supplier_url?: string | null;  // ссылка на товар на сайте поставщика
   available?: boolean;           // false — нет в наличии у поставщика
+  // Поля DD Audio (для подбора по авто и группировки вариантов)
+  marks?: string[] | null;       // марки авто, к которым подходит товар
+  models?: string[] | null;      // модели с годами ("Citroen C-2 2003-2009")
+  parent_id?: string | null;     // id родительского товара у поставщика
+  short_title?: string | null;   // короткое название варианта
 }
 
 interface CartItem extends Product { quantity: number; }
@@ -848,6 +853,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const searchBoxRef = useRef<HTMLDivElement>(null);
   const [selectedCategory, setSelectedCategory] = useState('Усі');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  // «Підбір за авто»: справочник марка → модели (таблица car_models,
+  // её пересобирает импорт DD Audio) и выбранные значения фильтра
+  const [carData, setCarData] = useState<Record<string, string[]>>({});
+  const [carMark, setCarMark] = useState('');
+  const [carModel, setCarModel] = useState('');
   const skipNextSubcategoryReset = useRef(false);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -889,9 +899,33 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     fetchReviews();
   }, []);
 
+  // Справочник марок/моделей для «Підбір за авто». Таблица маленькая
+  // (несколько тысяч пар) — грузим один раз; если её ещё нет (миграция
+  // не выполнена) — фильтр просто не показывается.
+  useEffect(() => {
+    (async () => {
+      const rows: { mark: string; model: string }[] = [];
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase
+          .from('car_models')
+          .select('mark,model')
+          .order('mark')
+          .order('model')
+          .range(from, from + 999);
+        if (error || !data) break;
+        rows.push(...data);
+        if (data.length < 1000) break;
+      }
+      const map: Record<string, string[]> = {};
+      for (const r of rows) (map[r.mark] ??= []).push(r.model);
+      setCarData(map);
+    })();
+  }, []);
+
   // Признак «есть активный фильтр» — показываем товары (а не главную)
   const isSearching = searchQuery.trim() !== '';
-  const hasFilter = isAdminMode || selectedCategory !== 'Усі' || isSearching;
+  const hasCarFilter = carMark !== '';
+  const hasFilter = isAdminMode || selectedCategory !== 'Усі' || isSearching || hasCarFilter;
 
   // Серверная пагинация: грузим только текущую страницу выбранного фильтра.
   // Каталог большой (десятки тысяч товаров) — грузить всё в браузер нельзя.
@@ -914,6 +948,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         if (selectedCategory !== 'Усі') query = query.eq('category', selectedCategory);
         if (selectedSubcategory) query = query.eq('subcategory', selectedSubcategory);
       }
+      // «Підбір за авто» — работает вместе с категорией и поиском.
+      // marks/models — массивы (товар подходит нескольким авто), ищем вхождение
+      if (carModel) query = query.contains('models', [carModel]);
+      else if (carMark) query = query.contains('marks', [carMark]);
       // Товары без наличия у поставщика скрываем от покупателей (админ видит всё)
       if (withAvailability && !isAdminMode) query = query.not('available', 'is', false);
       return query
@@ -940,7 +978,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     const t = setTimeout(fetchProducts, isSearching ? 350 : 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, selectedSubcategory, searchQuery, currentPage, isAdminMode]);
+  }, [selectedCategory, selectedSubcategory, searchQuery, currentPage, isAdminMode, carMark, carModel]);
 
   const fetchReviews = async () => {
     const { data, error } = await supabase.from('reviews').select('*');
@@ -1018,10 +1056,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const paginatedProducts = products;
   const totalPages = Math.max(1, Math.ceil(totalCount / PRODUCTS_PER_PAGE));
 
-  // Сброс на первую страницу при смене категории/подкатегории/поиска
+  // Сброс на первую страницу при смене категории/подкатегории/поиска/авто
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategory, selectedSubcategory, searchQuery]);
+  }, [selectedCategory, selectedSubcategory, searchQuery, carMark, carModel]);
 
   // Закрываем выпадающий список поиска при клике вне его
   useEffect(() => {
@@ -1411,12 +1449,52 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             />
           )}
 
+          {/* Підбір за авто: марка → модель (данные из таблицы car_models) */}
+          {Object.keys(carData).length > 0 && (
+            <div className="bg-slate-50 border-b">
+              <div className="mx-auto max-w-7xl px-3 sm:px-4 py-3 flex flex-wrap items-center gap-2 text-sm">
+                <span className="flex items-center gap-1.5 font-bold text-slate-700">
+                  <CarFront className="h-4 w-4 text-purple-600" /> Підбір за авто:
+                </span>
+                <select
+                  value={carMark}
+                  onChange={(e) => { setCarMark(e.target.value); setCarModel(''); }}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 focus:border-purple-500 focus:outline-none"
+                >
+                  <option value="">Марка авто</option>
+                  {Object.keys(carData).map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                <select
+                  value={carModel}
+                  onChange={(e) => setCarModel(e.target.value)}
+                  disabled={!carMark}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 focus:border-purple-500 focus:outline-none disabled:opacity-50 max-w-[280px]"
+                >
+                  <option value="">{carMark ? 'Усі моделі' : 'Спочатку оберіть марку'}</option>
+                  {(carData[carMark] || []).map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                {carMark && (
+                  <button
+                    onClick={() => { setCarMark(''); setCarModel(''); }}
+                    className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-red-500 transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" /> Скинути
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Хлебные крошки — путь вместо блока с плитками категорий */}
           {showProducts && (
           <div id="categories" className="bg-white border-b shadow-sm scroll-mt-20">
             <div className="mx-auto max-w-7xl px-3 sm:px-4 py-3 flex flex-wrap items-center gap-1.5 text-sm">
               <button
-                onClick={() => { setActiveProductId(null); setSelectedCategory('Усі'); setSearchQuery(''); }}
+                onClick={() => { setActiveProductId(null); setSelectedCategory('Усі'); setSearchQuery(''); setCarMark(''); setCarModel(''); }}
                 className="text-slate-500 hover:text-purple-700 transition-colors font-medium"
               >
                 Головна

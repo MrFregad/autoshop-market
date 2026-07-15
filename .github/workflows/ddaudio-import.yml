@@ -1,0 +1,65 @@
+# Автоматический импорт товаров DD Audio (ddaudio.com.ua) через их API:
+# цены, скидки и наличие обновляются раз в сутки.
+# Ручной запуск: GitHub → Actions → «DD Audio: імпорт товарів» → Run workflow.
+#
+# Нужны секреты репозитория (GitHub → Settings → Secrets and variables → Actions):
+#   DDAUDIO_API_TOKEN    — токен API из кабинета DD Audio
+#   SUPABASE_SERVICE_KEY — service-ключ Supabase (Settings → API → service_role)
+#
+# ~11 запросов к API с паузой 5.5 с (лимит поставщика: 1 запрос в 5 секунд)
+# + заливка ~100 тыс. товаров — шаг импорта обычно занимает 5-15 минут.
+#
+# Если после импорта изменилось дерево категорий (src/catalogTree.ts) —
+# workflow сам коммитит его в main, и Vercel пересобирает сайт.
+
+name: 'DD Audio: імпорт товарів'
+
+on:
+  schedule:
+    # Каждый день в 04:30 UTC (07:30 по Киеву летом) — в другое время, чем Dropt (03:30)
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+    inputs:
+      replace_parsed:
+        description: 'РАЗОВАЯ чистка: удалить старые распарсенные товары DD (supplier IS NULL, кроме Koch Chemie)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # чтобы коммитить обновлённый src/catalogTree.ts
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          # supabase-js требует Node 22+ (нативный WebSocket)
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Import DD Audio products
+        env:
+          DDAUDIO_API_TOKEN: ${{ secrets.DDAUDIO_API_TOKEN }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: node scripts/ddaudio-import.mjs ${{ inputs.replace_parsed && '--replace-parsed' || '' }}
+
+      - name: Commit updated catalog tree (if changed)
+        run: |
+          if ! git diff --quiet src/catalogTree.ts; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add src/catalogTree.ts
+            git commit -m "Оновлення дерева категорій (імпорт DD Audio)"
+            git pull --rebase origin main
+            git push origin main
+          else
+            echo "catalogTree.ts не изменился — коммит не нужен."
+          fi

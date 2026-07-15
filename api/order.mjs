@@ -114,6 +114,10 @@ export default async function handler(req, res) {
         const url = it.supplier_url ? `\n    ${it.supplier_url}` : '';
         return `${line}\n    🌐 Сайт: dropt.in.ua${art}${url}`;
       }
+      if (it.supplier === 'ddaudio') {
+        const art = it.supplier_sku ? `, арт. ${it.supplier_sku}` : '';
+        return `${line}\n    🌐 Сайт: ddaudio.com.ua${art}`;
+      }
       return `${line}\n    🏠 Сайт: власний склад`;
     })
     .join('\n');
