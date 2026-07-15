@@ -7,7 +7,7 @@ import {
   PackageCheck, MapPin, Flame, ChevronRight, ChevronLeft,
   Zap, Headphones, Percent, Tag,
   TruckIcon, Wallet, FileText, MessageCircle, Link2, Check,
-  Battery, SprayCan, Layers, DoorOpen, Lightbulb, Sparkles,
+  SprayCan, Layers, Sparkles,
   CarFront, Armchair, Wind, ShieldCheck, RotateCcw, BadgeCheck,
   HelpCircle, ChevronDown, PhoneCall, ClipboardList, Package
 } from 'lucide-react';
@@ -405,7 +405,7 @@ const InfoTabs = () => {
               <motion.div key="terms" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <h5 className="text-sm font-bold text-amber-900 mb-2">Обмеження перевізників</h5>
-                  <p className="text-xs text-slate-700 leading-5"><span className="font-bold">Укрпошта:</span> акумулятори, товари понад 70 см або більше 30 кг.</p>
+                  <p className="text-xs text-slate-700 leading-5"><span className="font-bold">Укрпошта:</span> габаритні товари понад 70 см або більше 30 кг.</p>
                   <p className="text-xs text-slate-700 leading-5 mt-1"><span className="font-bold">Нова Пошта поштомат:</span> крупногабаритні товари більше 40х60х30 см або понад 20 кг.</p>
                 </div>
                 <div className="rounded-xl bg-slate-50 border p-4">
@@ -625,14 +625,11 @@ const PromoBanner = () => (
 );
 
 // ─── Hero (главная) ─────────────────────────────────────────
-// Бейджі асортименту — показують широту каталогу з першого екрана
-const assortmentBadges = [
-  { icon: <Battery className="h-4 w-4" />, label: 'Акумулятори' },
-  { icon: <SprayCan className="h-4 w-4" />, label: 'Автохімія' },
-  { icon: <Layers className="h-4 w-4" />, label: 'Килимки' },
-  { icon: <DoorOpen className="h-4 w-4" />, label: 'Дверні ручки' },
-  { icon: <Lightbulb className="h-4 w-4" />, label: 'Оптика' },
-  { icon: <Sparkles className="h-4 w-4" />, label: 'Тюнінг' },
+// Категорії автохімії (Koch Chemie, власний склад) — швидкий перехід з головної
+const chemistryCategories = [
+  'Мийка авто', "Екстер'єр", "Інтер'єр", 'Скло', 'Поліювання',
+  'NANO-захист', 'Консерванти', 'COLOURLOCK', 'Аромосаше',
+  'Набори (хімія)', 'Аксесуари (хімія)', 'Обладнання (хімія)',
 ];
 
 // Найбільші категорії каталогу — клік веде у каталог з фільтром
@@ -714,24 +711,18 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           Все для твого авто <span className="text-orange-400">в одному місці</span>
         </h1>
         <p className="mt-4 mx-auto max-w-4xl text-sm sm:text-base lg:text-lg text-purple-100 leading-relaxed">
-          Акумулятори, автохімія, килимки, дверні ручки, оптика, тюнінг та ще 20+ категорій.
+          Автохімія, килимки, дверні ручки, оптика, тюнінг та ще 20+ категорій.
           Модельний підбір за маркою, поколінням і кузовом — від витратних дрібниць до стайлінгу.
           Оберіть своє авто нижче — і побачите тільки ті товари, що точно підійдуть.
         </p>
-        {/* Бейджі асортименту */}
-        <div className="mt-5 flex flex-wrap justify-center gap-2">
-          {assortmentBadges.map((b, i) => (
-            <motion.span
-              key={b.label}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.15 + i * 0.07 }}
-              className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/15 px-3 py-1.5 text-xs font-semibold backdrop-blur"
-            >
-              <span className="text-orange-300">{b.icon}</span> {b.label}
-            </motion.span>
-          ))}
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="mt-6 text-lg sm:text-xl font-black text-orange-300"
+        >
+          Підбери під своє авто:
+        </motion.div>
       </motion.div>
 
       {/* Рядок підбору: Марка / Модель / Категорія / Підкатегорія / Показати */}
@@ -782,6 +773,39 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           >
             <Search className="h-4 w-4" /> Показати товари
           </motion.button>
+        </div>
+      </motion.div>
+
+      {/* Автохімія Koch Chemie — власний склад, швидкий перехід у категорії */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className="mt-8 rounded-2xl border border-white/15 bg-white/10 p-4 sm:p-5 backdrop-blur"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white shadow-lg shadow-orange-500/30">
+            <SprayCan className="h-5 w-5" />
+          </span>
+          <div className="text-left">
+            <div className="text-sm sm:text-base font-black">Автохімія Koch Chemie</div>
+            <div className="text-[11px] sm:text-xs text-purple-200">Власний склад — відправка в день замовлення</div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {chemistryCategories.map((name, i) => (
+            <motion.button
+              key={name}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.25 + i * 0.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => onSelectCategory(name)}
+              className="rounded-full bg-white/10 border border-white/15 px-3.5 py-1.5 text-xs font-semibold backdrop-blur hover:bg-orange-500 hover:border-orange-400 transition"
+            >
+              {name}
+            </motion.button>
+          ))}
         </div>
       </motion.div>
 
