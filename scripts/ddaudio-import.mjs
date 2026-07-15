@@ -177,12 +177,15 @@ while (offset < totalResults) {
 
     let g = bySku.get(sku);
     if (!g) {
-      g = { item, marks: new Set(), models: new Set(), available: false };
+      g = { item, marks: new Set(), models: new Set(), pairs: new Set(), available: false };
       bySku.set(sku, g);
     }
     if (mark && mark !== 'Універсальні') {
       g.marks.add(mark);
-      if (model) carPairs.add(`${mark}|${model}`);
+      if (model) {
+        carPairs.add(`${mark}|${model}`);
+        g.pairs.add(`${mark}|${model}`);
+      }
     }
     if (model) g.models.add(model);
     if (Number(item.available_in_stock ?? item.quantity ?? 0) > 0) g.available = true;
@@ -201,6 +204,9 @@ if (entriesFetched < totalResults * 0.9) {
 // ─── 1б. Собираем карточки товаров из групп ─────────────────
 const products = [];
 const feedSkus = new Set();
+// Для каждой пары «марка|модель» — категории и число товаров в наличии:
+// сайт подсвечивает в подборе категории, где для выбранного авто пусто
+const pairCats = new Map(); // 'mark|model' → { категория: { подкатегория: count } }
 let saleCount = 0, variantCount = 0;
 
 for (const [sku, g] of bySku) {
@@ -237,6 +243,16 @@ for (const [sku, g] of bySku) {
 
   const parentId = item.parent?.id != null ? String(item.parent.id) : null;
   if (parentId) variantCount++;
+
+  if (g.available) {
+    for (const pair of g.pairs) {
+      let cats = pairCats.get(pair);
+      if (!cats) { cats = {}; pairCats.set(pair, cats); }
+      const subs = (cats[category] ??= {});
+      const subKey = subcategory || '';
+      subs[subKey] = (subs[subKey] || 0) + 1;
+    }
+  }
 
   feedSkus.add(sku);
   products.push({
@@ -278,7 +294,7 @@ for (const pair of carPairs) {
   const mark = pair.slice(0, i);
   const model = pair.slice(i + 1);
   carMarks.add(mark);
-  carModels.push({ mark, model });
+  carModels.push({ mark, model, categories: pairCats.get(pair) || null });
 }
 
 console.log(`\nЗаписей в прайсе: ${entriesFetched}, карточек после группировки по артикулу: ${products.length}`);
@@ -461,15 +477,24 @@ if (gone.length === 0) {
 // 4d. Пересобираем справочник car_models для «Підбір за авто»
 console.log(`\nОбновляю справочник марок/моделей (${carModels.length} записей)...`);
 {
+  // Проверяем, есть ли уже колонка categories (добавлена поздней миграцией).
+  // Если нет — заливаем без неё, чтобы подбор по авто не остался пустым.
+  let rows = carModels;
+  const { error: probeErr } = await supabase.from('car_models').select('categories').limit(1);
+  if (probeErr) {
+    console.warn('Колонка car_models.categories недоступна (выполните свежую ddaudio_migration.sql) — заливаю без категорий:', probeErr.message);
+    rows = carModels.map(({ mark, model }) => ({ mark, model }));
+  }
+
   const { error: delErr } = await supabase.from('car_models').delete().neq('mark', '');
   if (delErr) {
     // Таблицы может ещё не быть (миграция не выполнена) — не валим импорт
     console.warn('Не удалось очистить car_models (миграция ddaudio_migration.sql выполнена?):', delErr.message);
   } else {
-    for (let i = 0; i < carModels.length; i += 1000) {
+    for (let i = 0; i < rows.length; i += 1000) {
       const { error } = await supabase
         .from('car_models')
-        .upsert(carModels.slice(i, i + 1000), { onConflict: 'mark,model' });
+        .upsert(rows.slice(i, i + 1000), { onConflict: 'mark,model' });
       if (error) { console.error('Ошибка заливки car_models:', error.message); process.exit(1); }
     }
     console.log('Справочник car_models обновлён.');

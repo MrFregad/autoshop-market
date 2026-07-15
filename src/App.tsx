@@ -660,6 +660,44 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
   const [sub, setSub] = useState('');
   const selectCls = 'w-full rounded-xl border-0 bg-white px-3 py-3 text-sm font-semibold text-slate-700 shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:opacity-60';
 
+  // Наявність товарів для обраного авто: { категорія: { підкатегорія: кількість } }.
+  // null — авто не вибрано або дані ще не залиті імпортом (показуємо без позначок).
+  const [availCats, setAvailCats] = useState<Record<string, Record<string, number>> | null>(null);
+
+  useEffect(() => {
+    if (!mark) { setAvailCats(null); return; }
+    let cancelled = false;
+    (async () => {
+      let q = supabase.from('car_models').select('categories').eq('mark', mark);
+      if (model) q = q.eq('model', model);
+      const { data, error } = await q;
+      if (cancelled) return;
+      if (error || !data) { setAvailCats(null); return; }
+      // Без моделі підсумовуємо по всіх моделях марки
+      const merged: Record<string, Record<string, number>> = {};
+      for (const row of data as { categories: Record<string, Record<string, number>> | null }[]) {
+        for (const [c, subs] of Object.entries(row.categories || {})) {
+          merged[c] ??= {};
+          for (const [s, n] of Object.entries(subs)) merged[c][s] = (merged[c][s] || 0) + n;
+        }
+      }
+      setAvailCats(Object.keys(merged).length ? merged : null);
+    })();
+    return () => { cancelled = true; };
+  }, [mark, model]);
+
+  // Скільки товарів у категорії для обраного авто (null = позначок не показуємо)
+  const catCount = (c: string): number | null =>
+    availCats ? Object.values(availCats[c] || {}).reduce((a, b) => a + b, 0) : null;
+
+  // Якщо після зміни авто обрана категорія/підкатегорія спорожніла — скидаємо
+  useEffect(() => {
+    if (!availCats) return;
+    if (cat && !catCount(cat)) { setCat(''); setSub(''); }
+    else if (cat && sub && !(availCats[cat]?.[sub])) setSub('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availCats]);
+
   return (
   <section className="relative overflow-hidden bg-gradient-to-br from-purple-700 via-violet-700 to-purple-900 text-white">
     {/* Декоративные пятна */}
@@ -714,11 +752,26 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           </select>
           <select value={cat} onChange={(e) => { setCat(e.target.value); setSub(''); }} className={selectCls}>
             <option value="">— Категорія —</option>
-            {Object.keys(catalogTree).map((c) => <option key={c} value={c}>{c}</option>)}
+            {Object.keys(catalogTree).map((c) => {
+              // Коли авто вибрано — показуємо кількість товарів, порожні категорії блокуємо
+              const n = catCount(c);
+              return (
+                <option key={c} value={c} disabled={n === 0}>
+                  {n === null ? c : n > 0 ? `${c} (${n})` : `${c} — немає товарів`}
+                </option>
+              );
+            })}
           </select>
           <select value={sub} onChange={(e) => setSub(e.target.value)} disabled={!cat || !(catalogTree[cat] || []).length} className={selectCls}>
             <option value="">— Підкатегорія —</option>
-            {(catalogTree[cat] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+            {(catalogTree[cat] || []).map((s) => {
+              const n = availCats && cat ? (availCats[cat]?.[s] || 0) : null;
+              return (
+                <option key={s} value={s} disabled={n === 0}>
+                  {n === null ? s : n > 0 ? `${s} (${n})` : `${s} — немає`}
+                </option>
+              );
+            })}
           </select>
           <motion.button
             whileHover={{ scale: 1.02 }}

@@ -30,6 +30,11 @@ create table if not exists public.car_models (
   primary key (mark, model)
 );
 
+-- Какие категории/подкатегории есть у этой модели и сколько товаров в наличии:
+-- {"Дефлектори": {"Козирки": 2, "Дефлектор на капот": 5}, ...}
+-- Заполняет импорт-скрипт; сайт подсвечивает в подборе пустые категории.
+alter table public.car_models add column if not exists categories jsonb;
+
 -- Читать справочник можно всем (это просто список марок/моделей),
 -- писать — только service-ключом (импорт-скрипт).
 alter table public.car_models enable row level security;
