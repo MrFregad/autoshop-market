@@ -1,4 +1,4 @@
-// АВТОГЕНЕРАЦИЯ скриптом scripts/import-products.mjs — не редактировать вручную.
+// АВТОГЕНЕРАЦИЯ скриптом scripts/ddaudio-import.mjs — не редактировать вручную.
 export const catalogTree: Record<string, string[]> = {
   "Автолампи": [
     "9012 - Лампи головного світла",
