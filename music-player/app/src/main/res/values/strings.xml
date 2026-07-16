@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Music Player</string>
+    <string name="no_songs">No music found on this device</string>
+    <string name="no_track">No track selected</string>
+    <string name="permission_needed">Audio permission is required to show your music</string>
+    <string name="play_pause">Play or pause</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <string name="now_playing">Now playing</string>
+</resources>
