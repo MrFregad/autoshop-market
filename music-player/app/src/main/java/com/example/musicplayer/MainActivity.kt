@@ -11,7 +11,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.view.View
 import android.widget.SeekBar
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -22,7 +24,8 @@ import java.util.concurrent.TimeUnit
 class MainActivity : AppCompatActivity(), MusicService.Listener {
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var adapter: SongAdapter
+    private lateinit var folderAdapter: FolderAdapter
+    private lateinit var songAdapter: SongAdapter
 
     private var service: MusicService? = null
     private var bound = false
@@ -30,14 +33,16 @@ class MainActivity : AppCompatActivity(), MusicService.Listener {
     private val handler = Handler(Looper.getMainLooper())
     private var userIsSeeking = false
 
+    private var folders: List<MusicFolder> = emptyList()
+    private var openFolder: MusicFolder? = null
+
     private val requestPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         if (results[audioPermission()] == true) {
-            loadSongs()
+            loadFolders()
         } else {
-            binding.emptyView.text = getString(R.string.permission_needed)
-            binding.emptyView.visibility = android.view.View.VISIBLE
+            showMessage(getString(R.string.permission_needed))
         }
     }
 
@@ -47,8 +52,6 @@ class MainActivity : AppCompatActivity(), MusicService.Listener {
             service = musicBinder.service
             service?.setListener(this@MainActivity)
             bound = true
-            // Push already-loaded songs into the service.
-            if (currentSongs.isNotEmpty()) service?.setPlaylist(currentSongs)
             onStateChanged()
         }
 
@@ -58,29 +61,31 @@ class MainActivity : AppCompatActivity(), MusicService.Listener {
         }
     }
 
-    private var currentSongs: List<Song> = emptyList()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        adapter = SongAdapter { index ->
-            currentSongs.let { service?.setPlaylist(it) }
+        folderAdapter = FolderAdapter { folder -> showFolder(folder) }
+        songAdapter = SongAdapter { index ->
+            val songs = openFolder?.songs ?: return@SongAdapter
+            service?.setPlaylist(songs)
             service?.playAt(index)
         }
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
-        binding.recyclerView.adapter = adapter
+        binding.recyclerView.adapter = folderAdapter
 
+        binding.backButton.setOnClickListener { showFolders() }
         binding.playPauseButton.setOnClickListener { service?.togglePlayPause() }
         binding.nextButton.setOnClickListener { service?.next() }
         binding.prevButton.setOnClickListener { service?.previous() }
+        binding.shuffleButton.setOnClickListener {
+            service?.toggleShuffle()
+        }
 
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    binding.currentTime.text = formatTime(progress.toLong())
-                }
+                if (fromUser) binding.currentTime.text = formatTime(progress.toLong())
             }
 
             override fun onStartTrackingTouch(sb: SeekBar?) {
@@ -90,6 +95,17 @@ class MainActivity : AppCompatActivity(), MusicService.Listener {
             override fun onStopTrackingTouch(sb: SeekBar?) {
                 userIsSeeking = false
                 service?.seekTo(sb?.progress ?: 0)
+            }
+        })
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (openFolder != null) {
+                    showFolders()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
             }
         })
 
@@ -123,6 +139,28 @@ class MainActivity : AppCompatActivity(), MusicService.Listener {
         handler.removeCallbacksAndMessages(null)
     }
 
+    // --- Navigation --------------------------------------------------------
+
+    private fun showFolders() {
+        openFolder = null
+        binding.recyclerView.adapter = folderAdapter
+        binding.headerTitle.text = getString(R.string.folders)
+        binding.backButton.visibility = View.GONE
+        binding.emptyView.visibility =
+            if (folders.isEmpty()) View.VISIBLE else View.GONE
+    }
+
+    private fun showFolder(folder: MusicFolder) {
+        openFolder = folder
+        songAdapter.submit(folder.songs)
+        binding.recyclerView.adapter = songAdapter
+        binding.recyclerView.scrollToPosition(0)
+        binding.headerTitle.text = folder.name
+        binding.backButton.visibility = View.VISIBLE
+        binding.emptyView.visibility = View.GONE
+        service?.currentSong?.let { songAdapter.setPlayingId(it.id) }
+    }
+
     // --- Permissions -------------------------------------------------------
 
     private fun audioPermission(): String =
@@ -139,25 +177,20 @@ class MainActivity : AppCompatActivity(), MusicService.Listener {
         val needed = perms.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-        if (needed.isEmpty()) {
-            loadSongs()
-        } else {
-            requestPermission.launch(needed.toTypedArray())
-        }
+        if (needed.isEmpty()) loadFolders()
+        else requestPermission.launch(needed.toTypedArray())
     }
 
-    private fun loadSongs() {
-        val songs = MediaStoreRepository.loadSongs(this)
-        currentSongs = songs
-        adapter.submit(songs)
-        service?.setPlaylist(songs)
+    private fun loadFolders() {
+        folders = MediaStoreRepository.loadFolders(this)
+        folderAdapter.submit(folders)
+        showFolders()
+        if (folders.isEmpty()) showMessage(getString(R.string.no_songs))
+    }
 
-        if (songs.isEmpty()) {
-            binding.emptyView.text = getString(R.string.no_songs)
-            binding.emptyView.visibility = android.view.View.VISIBLE
-        } else {
-            binding.emptyView.visibility = android.view.View.GONE
-        }
+    private fun showMessage(text: String) {
+        binding.emptyView.text = text
+        binding.emptyView.visibility = View.VISIBLE
     }
 
     // --- Playback state ----------------------------------------------------
@@ -167,15 +200,17 @@ class MainActivity : AppCompatActivity(), MusicService.Listener {
             val svc = service ?: return@runOnUiThread
             val song = svc.currentSong
             if (song != null) {
-                binding.nowPlayingBar.visibility = android.view.View.VISIBLE
+                binding.nowPlayingBar.visibility = View.VISIBLE
                 binding.nowPlayingTitle.text = song.title
                 binding.nowPlayingArtist.text = song.artist
-                adapter.setPlayingIndex(svc.currentIndex)
+                songAdapter.setPlayingId(song.id)
             }
             binding.playPauseButton.setImageResource(
                 if (svc.isPlaying) android.R.drawable.ic_media_pause
                 else android.R.drawable.ic_media_play
             )
+            val shuffleColor = if (svc.shuffleEnabled) R.color.accent else R.color.text_secondary
+            binding.shuffleButton.setColorFilter(ContextCompat.getColor(this, shuffleColor))
         }
     }
 

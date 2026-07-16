@@ -19,13 +19,16 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import androidx.media.session.MediaButtonReceiver
 
 /**
  * Foreground service that owns the [MediaPlayer]. It is the single source of
  * truth for playback so the UI, the notification and the lock-screen controls
  * all stay in sync. The UI binds to it to send commands and observe state.
+ *
+ * Playback follows [order], a sequence of indices into [playlist]. In normal
+ * mode the order is sequential; when shuffle is on it is a random permutation
+ * that keeps the currently playing track at the front.
  */
 class MusicService : android.app.Service(), AudioManager.OnAudioFocusChangeListener {
 
@@ -58,8 +61,17 @@ class MusicService : android.app.Service(), AudioManager.OnAudioFocusChangeListe
 
     var playlist: List<Song> = emptyList()
         private set
-    var currentIndex: Int = -1
+
+    /** The play sequence: positions in [order] hold indices into [playlist]. */
+    private val order = mutableListOf<Int>()
+    private var orderPos: Int = -1
+
+    var shuffleEnabled: Boolean = false
         private set
+
+    /** Index into [playlist] of the current track, or -1. */
+    val currentIndex: Int
+        get() = order.getOrElse(orderPos) { -1 }
 
     val currentSong: Song?
         get() = playlist.getOrNull(currentIndex)
@@ -106,15 +118,90 @@ class MusicService : android.app.Service(), AudioManager.OnAudioFocusChangeListe
 
     // --- Playback controls -------------------------------------------------
 
+    /** Replaces the active playlist (e.g. the songs of a chosen folder). */
     fun setPlaylist(songs: List<Song>) {
         playlist = songs
     }
 
+    /** Starts playback at [index] within the current playlist. */
     fun playAt(index: Int) {
         if (index !in playlist.indices) return
-        currentIndex = index
-        val song = playlist[index]
+        buildOrder(index)
+        startCurrent()
+    }
 
+    fun togglePlayPause() {
+        val p = player
+        if (p == null) {
+            if (currentIndex >= 0) startCurrent()
+            else if (playlist.isNotEmpty()) playAt(0)
+            return
+        }
+        if (p.isPlaying) {
+            p.pause()
+        } else {
+            if (requestAudioFocus()) p.start()
+        }
+        updateAll()
+    }
+
+    fun next() {
+        if (order.isEmpty()) return
+        orderPos = (orderPos + 1) % order.size
+        startCurrent()
+    }
+
+    fun previous() {
+        if (order.isEmpty()) return
+        // Restart current track if we're more than 3s in, otherwise go back.
+        if (currentPosition > 3000) {
+            startCurrent()
+            return
+        }
+        orderPos = if (orderPos - 1 < 0) order.size - 1 else orderPos - 1
+        startCurrent()
+    }
+
+    fun seekTo(ms: Int) {
+        try {
+            player?.seekTo(ms)
+        } catch (e: IllegalStateException) {
+            // Player not ready yet; ignore.
+        }
+        updateNotificationAndSession()
+    }
+
+    /** Toggles shuffle without interrupting the current track. */
+    fun toggleShuffle() {
+        shuffleEnabled = !shuffleEnabled
+        buildOrder(currentIndex)
+        updateAll()
+    }
+
+    // --- Order / shuffle ---------------------------------------------------
+
+    /**
+     * Rebuilds [order]. When [startIndex] is a valid playlist index the current
+     * track stays selected (and, in shuffle mode, is moved to the front so it
+     * keeps playing). Does not start or restart playback.
+     */
+    private fun buildOrder(startIndex: Int) {
+        order.clear()
+        order.addAll(playlist.indices)
+        if (shuffleEnabled) {
+            order.shuffle()
+            if (startIndex in playlist.indices) {
+                order.remove(startIndex)
+                order.add(0, startIndex)
+            }
+            orderPos = 0
+        } else {
+            orderPos = if (startIndex in playlist.indices) order.indexOf(startIndex) else 0
+        }
+    }
+
+    private fun startCurrent() {
+        val song = currentSong ?: return
         releasePlayer()
         player = MediaPlayer().apply {
             setAudioAttributes(
@@ -134,45 +221,6 @@ class MusicService : android.app.Service(), AudioManager.OnAudioFocusChangeListe
             prepareAsync()
         }
         updateAll()
-    }
-
-    fun togglePlayPause() {
-        val p = player
-        if (p == null) {
-            if (currentIndex >= 0) playAt(currentIndex)
-            else if (playlist.isNotEmpty()) playAt(0)
-            return
-        }
-        if (p.isPlaying) {
-            p.pause()
-        } else {
-            if (requestAudioFocus()) p.start()
-        }
-        updateAll()
-    }
-
-    fun next() {
-        if (playlist.isEmpty()) return
-        playAt((currentIndex + 1) % playlist.size)
-    }
-
-    fun previous() {
-        if (playlist.isEmpty()) return
-        // Restart current track if we're more than 3s in, otherwise go back.
-        if (currentPosition > 3000) {
-            playAt(currentIndex)
-        } else {
-            playAt(if (currentIndex - 1 < 0) playlist.size - 1 else currentIndex - 1)
-        }
-    }
-
-    fun seekTo(ms: Int) {
-        try {
-            player?.seekTo(ms)
-        } catch (e: IllegalStateException) {
-            // Player not ready yet; ignore.
-        }
-        updateNotificationAndSession()
     }
 
     // --- Audio focus -------------------------------------------------------

@@ -1,6 +1,7 @@
 package com.example.musicplayer
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.example.musicplayer.databinding.ItemSongBinding
@@ -11,18 +12,18 @@ class SongAdapter(
 ) : RecyclerView.Adapter<SongAdapter.SongViewHolder>() {
 
     private var songs: List<Song> = emptyList()
-    private var playingIndex: Int = -1
+    private var playingId: Long = -1L
 
     fun submit(list: List<Song>) {
         songs = list
         notifyDataSetChanged()
     }
 
-    fun setPlayingIndex(index: Int) {
-        val old = playingIndex
-        playingIndex = index
-        if (old in songs.indices) notifyItemChanged(old)
-        if (index in songs.indices) notifyItemChanged(index)
+    /** Highlights the row whose track id matches, regardless of position. */
+    fun setPlayingId(id: Long) {
+        if (playingId == id) return
+        playingId = id
+        notifyDataSetChanged()
     }
 
     inner class SongViewHolder(val binding: ItemSongBinding) :
@@ -41,8 +42,7 @@ class SongAdapter(
         holder.binding.artist.text = song.artist
         holder.binding.duration.text = formatDuration(song.duration)
         holder.binding.nowPlaying.visibility =
-            if (position == playingIndex) android.view.View.VISIBLE
-            else android.view.View.INVISIBLE
+            if (song.id == playingId) View.VISIBLE else View.INVISIBLE
         holder.binding.root.setOnClickListener { onClick(position) }
     }
 
