@@ -1,0 +1,57 @@
+# Автоматическая публикация постов на страницу Facebook.
+#
+# По будням берёт первый одобренный пост из marketing/fb-posts.json,
+# публикует его через Graph API и коммитит обновлённую очередь.
+# Если очередь пуста — тихо завершается (заполняем очередь раз в неделю).
+#
+# Ручной запуск: GitHub → Actions → «Facebook: публікація поста» → Run workflow.
+#
+# Нужны секреты репозитория (GitHub → Settings → Secrets and variables → Actions):
+#   FB_PAGE_ID    — ID страницы Facebook
+#   FB_PAGE_TOKEN — Page Access Token с правом pages_manage_posts
+#   (как получить — см. FACEBOOK_SETUP.md в корне репозитория)
+
+name: 'Facebook: публікація поста'
+
+on:
+  schedule:
+    # По будням в 08:00 UTC (11:00 по Киеву летом, 10:00 зимой)
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # чтобы коммитить обновлённый marketing/fb-posts.json
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Скрипт использует только встроенные модули Node — npm ci не нужен
+
+      - name: Publish next approved post
+        env:
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: node scripts/fb-publish.mjs
+
+      - name: Commit updated queue (if changed)
+        run: |
+          if ! git diff --quiet marketing/fb-posts.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add marketing/fb-posts.json
+            git commit -m "Facebook: пост опубліковано (оновлення черги)"
+            git pull --rebase origin main
+            git push origin main
+          else
+            echo "Очередь не изменилась — коммит не нужен."
+          fi
