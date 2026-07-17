@@ -218,6 +218,11 @@ class MusicService : android.app.Service(), AudioManager.OnAudioFocusChangeListe
                     updateAll()
                 }
             }
+            setOnErrorListener { _, _, _ ->
+                // Swallow playback errors (e.g. an unplayable file) so the app
+                // doesn't crash; keep the service alive and skip the track.
+                true
+            }
             prepareAsync()
         }
         updateAll()
@@ -390,16 +395,21 @@ class MusicService : android.app.Service(), AudioManager.OnAudioFocusChangeListe
 
     private fun updateNotificationAndSession() {
         val notification = buildNotification()
-        if (isPlaying) {
-            startForeground(NOTIFICATION_ID, notification)
-        } else {
-            // Keep the notification but let the service be dismissible when paused.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                stopForeground(STOP_FOREGROUND_DETACH)
-            } else {
-                @Suppress("DEPRECATION")
-                stopForeground(false)
+        // Stay in the foreground for as long as a track is loaded — including the
+        // brief gap while switching tracks. Dropping and re-acquiring the
+        // foreground state from the background (screen off) throws
+        // ForegroundServiceStartNotAllowedException on Android 12+ and crashes
+        // the app, so we never demote here; only stopPlayback() leaves foreground.
+        if (currentSong != null) {
+            try {
+                startForeground(NOTIFICATION_ID, notification)
+            } catch (e: Exception) {
+                // Extremely rare (e.g. first start already from background): fall
+                // back to a plain notification instead of crashing.
+                val nm = getSystemService(NotificationManager::class.java)
+                nm.notify(NOTIFICATION_ID, notification)
             }
+        } else {
             val nm = getSystemService(NotificationManager::class.java)
             nm.notify(NOTIFICATION_ID, notification)
         }
