@@ -29,6 +29,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const QUEUE_FILE = resolve(__dirname, '../marketing/fb-posts.json');
 
 const queue = JSON.parse(readFileSync(QUEUE_FILE, 'utf8'));
+
+// Сначала удаляем посты из списка deleteIds (например, опубликованные,
+// пока приложение было в режиме разработки — их никто не видит).
+if (queue.deleteIds?.length) {
+  for (const id of queue.deleteIds) {
+    const res = await fetch(`${GRAPH}/${id}?access_token=${encodeURIComponent(TOKEN)}`, { method: 'DELETE' });
+    const data = await res.json();
+    console.log(`Удаление старого поста ${id}: ${res.ok && !data.error ? 'ок' : JSON.stringify(data.error ?? data)}`);
+  }
+  queue.deleteIds = [];
+  writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2) + '\n', 'utf8');
+}
+
 const post = queue.posts.find((p) => p.status === 'approved');
 
 if (!post) {
