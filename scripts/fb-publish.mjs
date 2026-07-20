@@ -62,12 +62,16 @@ if (post.image) {
   body.set('message', post.text);
 }
 
-const res = await fetch(endpoint, { method: 'POST', body });
-const data = await res.json();
-
-if (!res.ok || data.error) {
-  console.error('Facebook вернул ошибку:', JSON.stringify(data.error ?? data, null, 2));
-  process.exit(1);
+// Facebook иногда отвечает разовой ошибкой (перегрузка, таймаут скачивания
+// картинки и т.п.) — пробуем до 3 раз с паузой в минуту.
+let data;
+for (let attempt = 1; attempt <= 3; attempt++) {
+  const res = await fetch(endpoint, { method: 'POST', body });
+  data = await res.json();
+  if (res.ok && !data.error) break;
+  console.error(`Попытка ${attempt}/3 — Facebook вернул ошибку:`, JSON.stringify(data.error ?? data, null, 2));
+  if (attempt === 3) process.exit(1);
+  await new Promise((r) => setTimeout(r, 60_000));
 }
 
 post.status = 'posted';
