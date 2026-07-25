@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
-  const { name, phone, address, city, npOffice, items } = req.body ?? {};
+  const { name, phone, address, city, npOffice, npRef, items } = req.body ?? {};
 
   const str = (v, max) =>
     typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null;
@@ -47,6 +47,8 @@ export default async function handler(req, res) {
   // Новый формат — город + отделение; старый (одной строкой) тоже принимаем
   const orderCity = str(city, 100);
   const orderOffice = str(npOffice, 200);
+  // GUID відділення НП з довідника — саме його чекає постачальник
+  const orderNpRef = str(npRef, 64);
   const orderAddress =
     str(address, 300) ||
     (orderCity && orderOffice ? `${orderCity}, ${orderOffice}` : null);
@@ -167,6 +169,7 @@ export default async function handler(req, res) {
     phone: orderPhone,
     city: orderCity || orderAddress,
     npOffice: orderOffice || orderAddress,
+    npRef: orderNpRef || undefined,
     externalId: orderId ?? undefined,
     comment: 'Замовлення з autoshop-market',
     items: enrichedItems,

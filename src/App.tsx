@@ -951,6 +951,12 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const [orderPhone, setOrderPhone] = useState('');
   const [orderCity, setOrderCity] = useState('');
   const [orderNpOffice, setOrderNpOffice] = useState('');
+  // Довідник Нової Пошти: відділення передається постачальнику як ref (GUID),
+  // текстову назву він не приймає — тому місто й відділення обираються зі списку.
+  const [orderCityRef, setOrderCityRef] = useState('');
+  const [orderNpRef, setOrderNpRef] = useState('');
+  const [cityOptions, setCityOptions] = useState<{ ref: string; name: string; area: string }[]>([]);
+  const [npOffices, setNpOffices] = useState<{ ref: string; number: string; name: string }[]>([]);
   const [isSendingOrder, setIsSendingOrder] = useState(false);
 
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -1283,10 +1289,43 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     fetchReviews();
   };
 
+  // ─── Довідник Нової Пошти ─────────────────────────────────
+  // Пошук міст під час набору (через /api/np — токен живе на сервері)
+  useEffect(() => {
+    const q = orderCity.trim();
+    if (q.length < 2) { setCityOptions([]); return; }
+    const timer = setTimeout(() => {
+      fetch(`/api/np?type=cities&search=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(d => setCityOptions(d.items ?? []))
+        .catch(() => setCityOptions([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [orderCity]);
+
+  // Місто обране зі списку → знаємо його ref
+  useEffect(() => {
+    const match = cityOptions.find(
+      c => orderCity === `${c.name} (${c.area})` || orderCity === c.name
+    );
+    setOrderCityRef(match?.ref ?? '');
+  }, [orderCity, cityOptions]);
+
+  // Відділення завантажуються для обраного міста
+  useEffect(() => {
+    setOrderNpRef(''); setOrderNpOffice('');
+    if (!orderCityRef) { setNpOffices([]); return; }
+    fetch(`/api/np?type=warehouses&city_ref=${orderCityRef}`)
+      .then(r => r.json())
+      .then(d => setNpOffices(d.items ?? []))
+      .catch(() => setNpOffices([]));
+  }, [orderCityRef]);
+
   // ─── Order ────────────────────────────────────────────────
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orderName.trim() || !orderPhone.trim() || !orderCity.trim() || !orderNpOffice.trim()) { alert('Заповніть усі поля!'); return; }
+    if (!orderName.trim() || !orderPhone.trim() || !orderCity.trim()) { alert('Заповніть усі поля!'); return; }
+    if (!orderNpRef) { alert('Оберіть місто зі списку та відділення Нової Пошти!'); return; }
     if (cart.length === 0) { alert('Кошик порожній!'); return; }
 
     setIsSendingOrder(true);
@@ -1295,7 +1334,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: orderName, phone: orderPhone,
-          city: orderCity, npOffice: orderNpOffice,
+          city: orderCity, npOffice: orderNpOffice, npRef: orderNpRef,
           // id нужен серверу, чтобы определить поставщика товара (Dropt / свой склад)
           items: cart.map(item => ({ id: item.id, name: item.name, quantity: item.quantity, price: item.price })),
         }),
@@ -1303,7 +1342,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       const data = await response.json();
       if (data.ok) {
         alert('Дякуємо! Ваше замовлення прийнято!');
-        setCart([]); setOrderName(''); setOrderPhone(''); setOrderCity(''); setOrderNpOffice('');
+        setCart([]); setOrderName(''); setOrderPhone(''); setOrderCity(''); setOrderNpOffice(''); setOrderNpRef('');
         setIsCheckoutOpen(false); setIsCartOpen(false);
       } else { alert('Помилка відправки. Спробуйте ще раз.'); }
     } catch {
@@ -2167,11 +2206,29 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Місто *</label>
-                  <input type="text" value={orderCity} onChange={e => setOrderCity(e.target.value)} placeholder="м. Дніпро" className="w-full p-2.5 border border-slate-300 rounded-xl bg-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 text-sm transition" required />
+                  <input type="text" value={orderCity} onChange={e => setOrderCity(e.target.value)} list="np-cities" autoComplete="off" placeholder="Почніть вводити: Дніпро" className="w-full p-2.5 border border-slate-300 rounded-xl bg-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 text-sm transition" required />
+                  <datalist id="np-cities">
+                    {cityOptions.map(c => <option key={c.ref} value={`${c.name} (${c.area})`} />)}
+                  </datalist>
+                  {orderCity.trim().length >= 2 && !orderCityRef && (
+                    <p className="text-[11px] text-amber-600 mt-1">Оберіть місто зі списку підказок</p>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Відділення Нової Пошти / Укрпошти *</label>
-                  <input type="text" value={orderNpOffice} onChange={e => setOrderNpOffice(e.target.value)} placeholder="Відділення №1" className="w-full p-2.5 border border-slate-300 rounded-xl bg-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 text-sm transition" required />
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">Відділення Нової Пошти *</label>
+                  <select
+                    value={orderNpRef}
+                    onChange={e => {
+                      setOrderNpRef(e.target.value);
+                      setOrderNpOffice(npOffices.find(w => w.ref === e.target.value)?.name ?? '');
+                    }}
+                    disabled={npOffices.length === 0}
+                    className="w-full p-2.5 border border-slate-300 rounded-xl bg-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 text-sm transition disabled:bg-slate-100 disabled:text-slate-400"
+                    required
+                  >
+                    <option value="">{orderCityRef ? 'Оберіть відділення' : 'Спочатку оберіть місто'}</option>
+                    {npOffices.map(w => <option key={w.ref} value={w.ref}>{w.name}</option>)}
+                  </select>
                 </div>
                 <div className="bg-slate-50 border rounded-xl p-3 text-xs space-y-1 max-h-32 overflow-y-auto">
                   {cart.map(item => (
