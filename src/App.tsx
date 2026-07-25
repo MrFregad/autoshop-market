@@ -1292,7 +1292,9 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   // ─── Довідник Нової Пошти ─────────────────────────────────
   // Пошук міст під час набору (через /api/np — токен живе на сервері)
   useEffect(() => {
-    const q = orderCity.trim();
+    // Після вибору з підказки в полі стоїть «Місто (Область)» —
+    // шукаємо лише за назвою міста, інакше довідник нічого не знайде
+    const q = orderCity.trim().replace(/\s*\(.*$/, '');
     if (q.length < 2) { setCityOptions([]); return; }
     const timer = setTimeout(() => {
       fetch(`/api/np?type=cities&search=${encodeURIComponent(q)}`)
