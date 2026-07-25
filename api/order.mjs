@@ -167,7 +167,8 @@ export default async function handler(req, res) {
     phone: orderPhone,
     city: orderCity || orderAddress,
     npOffice: orderOffice || orderAddress,
-    comment: `Замовлення №${orderId ?? '—'} з autoshop-market`,
+    externalId: orderId ?? undefined,
+    comment: 'Замовлення з autoshop-market',
     items: enrichedItems,
   });
   if (droptResult.status === 'error') {
@@ -193,7 +194,7 @@ export default async function handler(req, res) {
 
   if (orderId !== null) message += `\n\n📋 Заявка #${orderId} збережена в базі`;
   if (droptResult.status === 'sent') {
-    message += `\n🚀 Dropt: передано${droptResult.droptOrderId ? ` (№${droptResult.droptOrderId})` : ''}`;
+    message += `\n🚀 Dropt: передано${droptResult.droptOrderId ? ` (№${droptResult.droptOrderId})` : ''}${droptResult.detail ? ` — ${droptResult.detail}` : ''}`;
   } else if (droptResult.status === 'error') {
     message += `\n⚠️ Dropt: ПОМИЛКА передачі — оформіть вручну!`;
   }

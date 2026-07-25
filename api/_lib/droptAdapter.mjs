@@ -1,34 +1,23 @@
-// Адаптер Dropt Landing API.
-// ЕДИНСТВЕННОЕ место, где живут URL и формат (маппинг полей) запроса к Dropt.
+// Адаптер Dropt API v2 (кабінет → Замовлення → API).
+// ЕДИНСТВЕННОЕ место, где живут URL и формат запроса к Dropt.
 //
-// Формат подтверждён опытным путём 2026-07-14 (проверка ответов эндпоинта):
-//   POST https://dropt.in.ua/index.php?route=api/landing/order
-//   {
-//     "token": "<API-токен из кабинета: Замовлення → Landing API>",
-//     "customer": { "name": "...", "phone": "...", ... },
-//     "items": [ { "sku": "<артикул vendorCode>", "quantity": 1 } ]
-//   }
-// Ответы: {"error": "..."} либо {"error": ["...", ...]} при проблеме;
-// при успехе — данные созданного заказа.
+//   POST https://dropt.in.ua/api/v2/orders/create
+//   Ответ: {success, order_id, paused, pause_reasons[]} | {success:false, error}
+//          {success:true, duplicate:true, order_id} — повтор по external_id
 //
-// Токен берётся ТОЛЬКО из переменной окружения DROPT_API_TOKEN (Vercel →
-// Settings → Environment Variables). В коде токена нет и быть не должно.
-//
+// Токен — только из DROPT_API_TOKEN (Vercel → Environment Variables).
 // Папка api/_lib не публикуется как endpoint (Vercel игнорирует пути с "_").
 
-// URL можно переопределить переменной окружения DROPT_API_URL (на всякий случай)
 const DROPT_API_URL =
-  process.env.DROPT_API_URL ||
-  'https://dropt.in.ua/index.php?route=api/landing/order';
+  process.env.DROPT_API_URL || 'https://dropt.in.ua/api/v2/orders/create';
 
 /**
- * Отправляет заказ в Dropt. Никогда не бросает исключение —
- * любая проблема возвращается как { status: 'error' | 'skipped' },
- * чтобы сбой Dropt не сломал оформление заказа на сайте.
+ * Отправляет заказ в Dropt. Никогда не бросает исключение — любая проблема
+ * возвращается статусом, чтобы сбой Dropt не сломал оформление на сайте.
  *
  * @param {{
  *   name: string, phone: string, city: string, npOffice: string,
- *   comment?: string,
+ *   npRef?: string, externalId?: number|string, comment?: string, test?: boolean,
  *   items: Array<{ name: string, quantity: number, price: number,
  *                  supplier?: string|null, supplier_sku?: string|null }>
  * }} order
@@ -36,11 +25,8 @@ const DROPT_API_URL =
  */
 export async function pushOrderToDropt(order) {
   const token = process.env.DROPT_API_TOKEN;
-  if (!token) {
-    return { status: 'skipped', detail: 'DROPT_API_TOKEN не задан' };
-  }
+  if (!token) return { status: 'skipped', detail: 'DROPT_API_TOKEN не задан' };
 
-  // В Dropt передаём только товары этого поставщика
   const droptItems = order.items.filter(
     (i) => i.supplier === 'dropt' && i.supplier_sku
   );
@@ -48,35 +34,34 @@ export async function pushOrderToDropt(order) {
     return { status: 'skipped', detail: 'у замовленні немає товарів Dropt' };
   }
 
-  // ── МАППИНГ ПОЛЕЙ ─────────────────────────────────────────
-  // customer: обязательны name и phone; город/отделение передаём и в
-  // отдельных полях, и в comment — чтобы точно дошло до менеджера Dropt.
-  const deliveryNote = [order.city, order.npOffice].filter(Boolean).join(', ');
   const payload = {
     token,
-    customer: {
-      name: order.name,
-      phone: order.phone,
-      city: order.city || '',
-      np_office: order.npOffice || '',
-      comment: [deliveryNote, order.comment || ''].filter(Boolean).join(' | '),
-    },
-    items: droptItems.map((i) => ({
+    // Защита от дублей: повторная отправка вернёт duplicate вместо второго заказа
+    external_id: order.externalId ? `autoshop-${order.externalId}` : undefined,
+    phone: order.phone,
+    name: order.name,
+    delivery_type: 'np',
+    // address — это WarehouseRef (GUID) отделения НП, текстовые названия Dropt
+    // не принимает. На сайте отделение вводится строкой, поэтому шлём GUID
+    // только если он есть; иначе Dropt поставит заказ на паузу с причиной
+    // «Відділення НП не розпізнано» — отделение дозаполняется в кабинете.
+    address: order.npRef || undefined,
+    payment: 'cod',
+    comment: [order.city, order.npOffice, order.comment].filter(Boolean).join(' | '),
+    products: droptItems.map((i) => ({
       sku: i.supplier_sku,
       quantity: i.quantity,
-      // Розничная цена сайта: Dropt по ней считает прибыль владельца
-      // (перевіренo: profit = price - дроп-цена в ответе API)
       price: i.price,
     })),
+    test: order.test || undefined,
   };
 
   try {
-    // Таймаут 10 секунд, чтобы не подвешивать оформление заказа
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10_000);
     const resp = await fetch(DROPT_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
@@ -86,17 +71,19 @@ export async function pushOrderToDropt(order) {
     let data = {};
     try { data = JSON.parse(text); } catch { /* ответ не JSON */ }
 
-    // Dropt сообщает об ошибках полем "error" (строка или массив строк)
-    if (data.error) {
-      const msg = Array.isArray(data.error) ? data.error.join('; ') : String(data.error);
-      return { status: 'error', detail: msg.slice(0, 300) };
+    if (!data.success) {
+      return { status: 'error', detail: String(data.error || text).slice(0, 300) };
     }
-    if (!resp.ok) {
-      return { status: 'error', detail: `HTTP ${resp.status}: ${text.slice(0, 300)}` };
-    }
-    const droptOrderId =
-      String(data.order_id ?? data.id ?? data.order?.id ?? '') || undefined;
-    return { status: 'sent', droptOrderId, detail: text.slice(0, 300) };
+    const detail = data.duplicate
+      ? 'дубль (замовлення вже було)'
+      : data.paused
+        ? `на паузі: ${(data.pause_reasons || []).join(', ')}`
+        : 'прийнято';
+    return {
+      status: 'sent',
+      droptOrderId: String(data.order_id ?? '') || undefined,
+      detail,
+    };
   } catch (err) {
     return { status: 'error', detail: String(err?.message || err) };
   }
