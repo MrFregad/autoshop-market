@@ -635,6 +635,17 @@ const chemistryCategories = [
 // Решта категорій каталогу (окрім «Автохімія» — її підкатегорії вже вище)
 const otherCategories = Object.keys(catalogTree).filter((c) => c !== 'Автохімія');
 
+// ─── Адреси категорій ───────────────────────────────────────
+// У кожної категорії власна сторінка /category/<назва> — таке посилання можна
+// вставляти в рекламний пост. Назва йде в URL як є (кирилиця читається),
+// косу риску («Багажники/Дуги на дах») міняємо на дефіс, щоб не ламати шлях.
+const allCategories = [...Object.keys(catalogTree), ...chemistryCategories, 'Брендована продукція'];
+const categorySlug = (name: string) => encodeURIComponent(name.replace(/\//g, '-'));
+const slugToCategory = (slug: string) => {
+  const decoded = decodeURIComponent(slug);
+  return allCategories.find((c) => c.replace(/\//g, '-') === decoded) ?? 'Усі';
+};
+
 // Найбільші категорії каталогу — клік веде у каталог з фільтром
 const heroCategories = [
   { icon: <Wind className="h-6 w-6" />, name: 'Дефлектори' },
@@ -951,6 +962,9 @@ export default function App() {
   const setActiveProductId = (id: number | null) => {
     navigate(id == null ? '/' : `/product/${id}`);
   };
+  // «Назад до каталогу»: повертаємось на попередню сторінку (категорія, пошук),
+  // а якщо товар відкрили за прямим посиланням з реклами — на головну.
+  const goBack = () => (location.key === 'default' ? navigate('/') : navigate(-1));
   const [linkCopied, setLinkCopied] = useState(false);
 
 // Structured data для открытого товара
@@ -967,14 +981,20 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   // Выпадающий список результатов под полем поиска
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const searchBoxRef = useRef<HTMLDivElement>(null);
-  const [selectedCategory, setSelectedCategory] = useState('Усі');
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  // Категорія і підкатегорія живуть в URL: /category/Килимки[/Килимки EVA…] —
+  // у кожної категорії своя сторінка, посилання можна кидати в рекламу.
+  const catMatch = location.pathname.match(/^\/category\/([^/]+)(?:\/([^/]+))?/);
+  const selectedCategory = catMatch ? slugToCategory(catMatch[1]) : 'Усі';
+  const selectedSubcategory = catMatch?.[2] ? decodeURIComponent(catMatch[2]) : null;
+  const openCategory = (category: string, subcategory?: string | null) => {
+    if (category === 'Усі') return navigate('/');
+    navigate(`/category/${categorySlug(category)}${subcategory ? `/${encodeURIComponent(subcategory)}` : ''}`);
+  };
   // «Підбір за авто»: справочник марка → модели (таблица car_models,
   // её пересобирает импорт DD Audio) и выбранные значения фильтра
   const [carData, setCarData] = useState<Record<string, string[]>>({});
   const [carMark, setCarMark] = useState('');
   const [carModel, setCarModel] = useState('');
-  const skipNextSubcategoryReset = useRef(false);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const PRODUCTS_PER_PAGE = 18;
@@ -1199,23 +1219,20 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // При смене категории сбрасываем выбранную подкатегорию
-  // (кроме случаев, когда категория и подкатегория выбираются одновременно — см. handleCatalogMenuSelect)
-  useEffect(() => {
-    if (skipNextSubcategoryReset.current) {
-      skipNextSubcategoryReset.current = false;
-      return;
-    }
-    setSelectedSubcategory(null);
-  }, [selectedCategory]);
+  // Логотип і «Головна» в хлібних крихтах — повне повернення на головну.
+  // Скидаємо і підбір за авто: інакше фільтр лишався активним і замість
+  // головної далі показувався каталог.
+  const goHome = () => {
+    setSearchQuery('');
+    setCarMark('');
+    setCarModel('');
+    navigate('/');
+  };
 
   // Выбор категории/подкатегории з мега-меню каталогу
   const handleCatalogMenuSelect = (category: string, subcategory?: string) => {
-    setActiveProductId(null);
     setSearchQuery('');
-    skipNextSubcategoryReset.current = true;
-    setSelectedCategory(category);
-    setSelectedSubcategory(subcategory ?? null);
+    openCategory(category, subcategory);
     requestAnimationFrame(() => {
       document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -1405,7 +1422,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         <div className="mx-auto max-w-7xl px-3 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4 sm:py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 sm:gap-3">
-              <motion.div onClick={() => { setActiveProductId(null); setSelectedCategory('Усі'); setSearchQuery(''); }} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
+              <motion.div onClick={goHome} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
                 AUTO<span className="text-orange-500">SHOP</span>
               </motion.div>
               <CatalogMegaMenu onSelect={handleCatalogMenuSelect} open={isCatalogMenuOpen} onOpenChange={setIsCatalogMenuOpen} />
@@ -1610,15 +1627,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               onOpenChat={() => window.dispatchEvent(new Event('open-chat-widget'))}
               carData={carData}
               onPick={({ mark, model, category, subcategory }) => {
-                setActiveProductId(null);
                 setSearchQuery('');
                 setCarMark(mark);
                 setCarModel(model);
-                if (category) {
-                  skipNextSubcategoryReset.current = true;
-                  setSelectedCategory(category);
-                  setSelectedSubcategory(subcategory || null);
-                }
+                if (category) openCategory(category, subcategory || null);
                 requestAnimationFrame(() => {
                   document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 });
@@ -1671,7 +1683,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           <div id="categories" className="bg-white border-b shadow-sm scroll-mt-20">
             <div className="mx-auto max-w-7xl px-3 sm:px-4 py-3 flex flex-wrap items-center gap-1.5 text-sm">
               <button
-                onClick={() => { setActiveProductId(null); setSelectedCategory('Усі'); setSearchQuery(''); setCarMark(''); setCarModel(''); }}
+                onClick={goHome}
                 className="text-slate-500 hover:text-purple-700 transition-colors font-medium"
               >
                 Головна
@@ -1688,7 +1700,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   {selectedSubcategory ? (
                     <>
                       <button
-                        onClick={() => setSelectedSubcategory(null)}
+                        onClick={() => openCategory(selectedCategory)}
                         className="text-slate-500 hover:text-purple-700 transition-colors font-medium"
                       >
                         {selectedCategory}
@@ -2005,7 +2017,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           <motion.button
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            onClick={() => setActiveProductId(null)}
+            onClick={goBack}
             className="flex items-center gap-2 text-xs font-semibold text-slate-600 bg-white border px-4 py-2 rounded-xl mb-6 hover:shadow-md transition"
           >
             <ArrowLeft className="h-4 w-4" /> Назад до каталогу

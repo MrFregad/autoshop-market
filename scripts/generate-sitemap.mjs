@@ -28,7 +28,7 @@ let from = 0;
 while (true) {
   const { data, error } = await supabase
     .from('products')
-    .select('id,name')
+    .select('id,name,category')
     .order('id', { ascending: true })
     .range(from, from + BATCH - 1);
   if (error) { console.error('Supabase error:', error.message); process.exit(1); }
@@ -40,8 +40,16 @@ while (true) {
 
 const products = rows.filter((r) => !isPlaceholder(r.name));
 
+// Сторінки категорій /category/<назва> — те саме посилання, що йде в рекламу
+// (коса риска в назві міняється на дефіс, як у App.tsx)
+const categories = [...new Set(products.map((p) => p.category).filter(Boolean))].sort();
+
 const urls = [
   `  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`,
+  ...categories.map(
+    (c) =>
+      `  <url>\n    <loc>${SITE}/category/${encodeURIComponent(c.replace(/\//g, '-'))}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n  </url>`
+  ),
   ...products.map(
     (p) =>
       `  <url>\n    <loc>${SITE}/product/${p.id}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>`
