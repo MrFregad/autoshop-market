@@ -9,13 +9,13 @@ import {
   TruckIcon, Wallet, FileText, MessageCircle, Link2, Check,
   SprayCan, Layers, Sparkles,
   CarFront, Armchair, Wind, ShieldCheck, RotateCcw, BadgeCheck,
-  HelpCircle, ChevronDown, PhoneCall, ClipboardList, Package
+  HelpCircle, ChevronDown, PhoneCall, ClipboardList, Package, Grid3x3
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
-import { CatalogMegaMenu } from './components/CatalogMegaMenu';
+import { CatalogMegaMenu, CATEGORY_ICONS, DEFAULT_ICON } from './components/CatalogMegaMenu';
 import { catalogTree } from './catalogTree';
 import { ChatWidget } from './components/ChatWidget';
 import { buildSearchFilters } from './lib/searchTranslate';
@@ -632,6 +632,9 @@ const chemistryCategories = [
   'Набори (хімія)', 'Аксесуари (хімія)', 'Обладнання (хімія)',
 ];
 
+// Решта категорій каталогу (окрім «Автохімія» — її підкатегорії вже вище)
+const otherCategories = Object.keys(catalogTree).filter((c) => c !== 'Автохімія');
+
 // Найбільші категорії каталогу — клік веде у каталог з фільтром
 const heroCategories = [
   { icon: <Wind className="h-6 w-6" />, name: 'Дефлектори' },
@@ -806,6 +809,40 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
               {name}
             </motion.button>
           ))}
+        </div>
+      </motion.div>
+
+      {/* Решта категорій каталогу — той самий швидкий перехід, що й у хімії */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.22 }}
+        className="mt-4 rounded-2xl border border-white/15 bg-white/10 p-4 sm:p-5 backdrop-blur"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-600 text-white shadow-lg shadow-purple-600/30">
+            <Grid3x3 className="h-5 w-5" />
+          </span>
+          <div className="text-left">
+            <div className="text-sm sm:text-base font-black">Решта категорій</div>
+            <div className="text-[11px] sm:text-xs text-purple-200">Аксесуари, тюнінг, оптика, килимки та інше</div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {otherCategories.map((name) => {
+            const Icon = CATEGORY_ICONS[name] || DEFAULT_ICON;
+            return (
+              <motion.button
+                key={name}
+                whileTap={{ scale: 0.96 }}
+                onClick={() => onSelectCategory(name)}
+                className="flex items-center gap-1.5 rounded-full bg-white/10 border border-white/15 px-3.5 py-1.5 text-xs font-semibold backdrop-blur hover:bg-purple-600 hover:border-purple-400 transition"
+              >
+                <Icon className="h-3.5 w-3.5 text-purple-200" />
+                {name}
+              </motion.button>
+            );
+          })}
         </div>
       </motion.div>
 
@@ -1017,8 +1054,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const fetchProducts = async () => {
     setIsLoading(true);
     const start = (currentPage - 1) * PRODUCTS_PER_PAGE;
-    const buildQuery = (withAvailability: boolean) => {
-      let query = supabase.from('products').select('*', { count: 'exact' });
+    const buildQuery = (withAvailability: boolean, withCount = true) => {
+      let query = supabase.from('products').select('*', withCount ? { count: 'exact' } : undefined);
       if (isSearching) {
         // Пошук російською → знаходить товари з українськими назвами.
         // Для кожного слова запиту шукаємо оригінал + укр. переклад
@@ -1047,6 +1084,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     // Если колонки available ещё нет в базе (миграция не выполнена) —
     // повторяем запрос без фильтра, чтобы каталог не пустел
     if (error) ({ data, count, error } = await buildQuery(false));
+    // Точний count сканує всю вибірку і на «холодній» базі падає з statement
+    // timeout (57014) — каталог показував «товарів не знайдено» на живих
+    // категоріях. Останній шанс: без count (пагінація зникне, товари будуть).
+    // Постійне рішення — індекси з supabase/products_indexes.sql.
+    if (error) ({ data, count, error } = await buildQuery(true, false));
     if (!error && data) {
       setProducts(data as Product[]);
       setTotalCount(count ?? data.length);
