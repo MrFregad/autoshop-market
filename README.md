@@ -124,7 +124,7 @@
 админки (заголовок `x-admin-key` = переменная `ADMIN_PASSWORD` в Vercel):
 
 ```bash
-curl -X POST https://ВАШ-САЙТ.vercel.app/api/dropt-order \
+curl -X POST https://autoshopmarket.com.ua/api/dropt-order \
   -H "Content-Type: application/json" \
   -H "x-admin-key: ПАРОЛЬ_АДМИНКИ" \
   -d '{

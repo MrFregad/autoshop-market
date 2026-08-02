@@ -5,7 +5,7 @@
 // Формат — RSS 2.0 с namespace g: (официальный формат Facebook Product Feed).
 //
 // Файл кладётся в public/facebook-catalog.xml и отдаётся Vercel по адресу:
-//   https://autoshop-market.vercel.app/facebook-catalog.xml
+//   https://autoshopmarket.com.ua/facebook-catalog.xml
 // Этот URL вставляется в Commerce Manager → Каталог → Источники данных →
 // Запланированный фид (обновление раз в сутки).
 //
@@ -16,7 +16,7 @@ import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-const SITE = 'https://autoshop-market.vercel.app';
+const SITE = 'https://autoshopmarket.com.ua';
 const CURRENCY = 'UAH';
 
 const supabase = createClient(

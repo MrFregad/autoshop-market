@@ -29,7 +29,7 @@
 3. Ваше повідомлення в темі приходить на webhook [api/telegram-webhook.mjs](api/telegram-webhook.mjs), який зберігає відповідь у Supabase.
 4. Віджет підписаний на Supabase Realtime — відповідь з'являється у клієнта миттєво, історія зберігається.
 
-Webhook зареєстровано на `https://autoshop-market.vercel.app/api/telegram-webhook`.
+Webhook зареєстровано на `https://autoshopmarket.com.ua/api/telegram-webhook`.
 Перереєстрація (якщо зміниться домен):
 
 ```

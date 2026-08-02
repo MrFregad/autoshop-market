@@ -13,7 +13,7 @@
 //
 // Маршрутизація — у vercel.json (rewrites перед catch-all на /index.html).
 
-const SITE = 'https://autoshop-market.vercel.app';
+const SITE = 'https://autoshopmarket.com.ua';
 const SUPABASE_URL = 'https://vhvedefyixgluayqahhh.supabase.co';
 const SUPABASE_ANON =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZodmVkZWZ5aXhnbHVheXFhaGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzE0OTEsImV4cCI6MjA5NjY0NzQ5MX0.RMK8MjUTTOO4slWV5kQw5ue7oAkUQyBFhaXhqz3FGtM';
@@ -256,8 +256,8 @@ async function demo() {
   };
   const html = productPage(shell, base);
 
-  assert.match(html, /<link rel="canonical" href="https:\/\/autoshop-market\.vercel\.app\/product\/271389" \/>/);
-  assert.ok(!html.includes('<link rel="canonical" href="https://autoshop-market.vercel.app/" />'), 'старий canonical лишився');
+  assert.match(html, /<link rel="canonical" href="https:\/\/autoshopmarket\.com\.ua\/product\/271389" \/>/);
+  assert.ok(!html.includes('<link rel="canonical" href="https://autoshopmarket.com.ua/" />'), 'старий canonical лишився');
   assert.match(html, /"@type":"Product"/);
   assert.match(html, /"price":"450"/);
   assert.ok(!/"description":"[^"]*<p>/.test(html), 'HTML протік у JSON-LD description');

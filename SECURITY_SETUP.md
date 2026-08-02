@@ -42,7 +42,7 @@ https://supabase.com/dashboard/project/vhvedefyixgluayqahhh/sql/new →
 Відкрити в браузері (підставивши новий токен):
 
 ```
-https://api.telegram.org/bot<НОВИЙ_ТОКЕН>/setWebhook?url=https://autoshop-market.vercel.app/api/telegram-webhook&secret_token=autoshop_chat_hook_x9K2mQ7pL4vR8sT1
+https://api.telegram.org/bot<НОВИЙ_ТОКЕН>/setWebhook?url=https://autoshopmarket.com.ua/api/telegram-webhook&secret_token=autoshop_chat_hook_x9K2mQ7pL4vR8sT1
 ```
 
 Має відповісти `{"ok":true,...,"description":"Webhook was set"}`.

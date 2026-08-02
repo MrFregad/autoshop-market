@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-const SITE = 'https://autoshop-market.vercel.app';
+const SITE = 'https://autoshopmarket.com.ua';
 const GRAPH = 'https://graph.facebook.com/v23.0';
 
 const PAGE_ID = process.env.FB_PAGE_ID;

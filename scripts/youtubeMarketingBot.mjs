@@ -756,7 +756,7 @@ function renderMp4({ ffmpeg, avatarPath, voicePath, outputPath, product, duratio
     drawText('Подходит для ежедневных поездок', 80, 1110, 58, '0xffffff', 'v10', 'v11', 860, 'between(t,8,17)'),
     drawText('Смотрите характеристики и цену на сайте магазина', 80, 1190, 38, '0xcbd5e1', 'v11', 'v12', 880, 'between(t,8,17)'),
     drawText('Заказать можно онлайн', 80, 1110, 58, '0xffffff', 'v12', 'v13', 860, 'between(t,17,30)'),
-    drawText('autoshop-market.vercel.app', 80, 1190, 42, '0xf97316', 'v13', 'v14', 880, 'between(t,17,30)'),
+    drawText('autoshopmarket.com.ua', 80, 1190, 42, '0xf97316', 'v13', 'v14', 880, 'between(t,17,30)'),
     `[v14]drawbox=x=80:y=1610:w=920:h=110:color=0xf97316@1:t=fill[v15]`,
     drawText('Ссылка на магазин в описании', 155, 1680, 44, '0xffffff', 'v15', 'outv')
   ].join(';');
