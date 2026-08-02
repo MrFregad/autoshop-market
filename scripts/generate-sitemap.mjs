@@ -29,6 +29,10 @@ while (true) {
   const { data, error } = await supabase
     .from('products')
     .select('id,name,category')
+    // Товари не в наявності в sitemap не заявляємо: Google витрачає на них
+    // краулінговий бюджет, а знаходить сторінку з OutOfStock. Зникне з наявності
+    // — піде з карти на наступному прогоні, сама сторінка лишається робочою.
+    .eq('available', true)
     .order('id', { ascending: true })
     .range(from, from + BATCH - 1);
   if (error) { console.error('Supabase error:', error.message); process.exit(1); }
@@ -81,5 +85,6 @@ const index =
 writeFileSync(resolve(PUBLIC_DIR, 'sitemap.xml'), index, 'utf8');
 
 console.log(
-  `Готово: ${products.length} товарів + головна, ${chunks.length} файлів (sitemap-1..${chunks.length}.xml) → ${PUBLIC_DIR}`
+  `Готово: ${products.length} товарів у наявності + ${categories.length} категорій + головна, ` +
+    `${chunks.length} файлів (sitemap-1..${chunks.length}.xml) → ${PUBLIC_DIR}`
 );
