@@ -294,6 +294,7 @@ const HomeShowcase = ({ onOpen, onAdd }: { onOpen: (id: number) => void; onAdd: 
       // (дешевше, ніж сортування по created_at — індекс первинного ключа).
       const base = () => supabase.from('products').select('*')
         .not('available', 'is', false)
+        .lte('price', 4000)   // вітрина — доступні товари, дорогі йдуть у каталог
         .order('id', { ascending: false });
       const [s, n] = await Promise.all([
         base().not('old_price', 'is', null).limit(80),
