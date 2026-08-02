@@ -135,6 +135,68 @@ async function apiGet(path, attempt = 1) {
   }
 }
 
+// ─── Защита от продажи ниже закупки ─────────────────────────
+// Розничный прайс (РРЦ) и оптовый (наша закупка) живут отдельно, причём
+// половина оптовых цен — в USD/EUR. Курс за сутки уезжает, а поставщик
+// иногда роняет розницу ниже нашего опта — так товар уходит в минус.
+// Поэтому тянем оптовый прайс и не даём цене опуститься ниже
+// закупка × (1 + MIN_MARGIN_PERCENT/100).
+const MIN_MARGIN_PERCENT = Number(process.env.DDAUDIO_MIN_MARGIN_PERCENT || 15);
+
+async function fetchRates() {
+  // Курс НБУ; при недоступности — пропускаем защиту, а не ломаем импорт
+  try {
+    const r = await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const rows = await r.json();
+    const rates = { UAH: 1 };
+    for (const row of rows) if (row.cc === 'USD' || row.cc === 'EUR') rates[row.cc] = row.rate;
+    if (!rates.USD || !rates.EUR) throw new Error('нет USD/EUR в ответе НБУ');
+    return rates;
+  } catch (err) {
+    console.warn(`  Курс НБУ недоступен (${err.message}) — защита цен отключена на этот прогон.`);
+    return null;
+  }
+}
+
+// sku → закупка в гривне
+async function fetchWholesale(rates) {
+  const cost = new Map();
+  let offset = 0, total = Infinity, page = 0;
+  while (offset < total) {
+    if (page > 0) await sleep(REQUEST_PAUSE_MS);
+    const resp = await apiGet(`/price/wholesale?lang=ua&offset=${offset}`);
+    total = resp.totalResults;
+    page++;
+    for (const it of resp.data) {
+      const sku = String(it.sku ?? '').trim();
+      const val = Number(it.price);
+      const rate = rates[(it.currency || 'UAH').trim()];
+      // Пустая цена в опт-прайсе (таких ~13 700) — просто нет данных, пропускаем
+      if (!sku || !Number.isFinite(val) || val <= 0 || !rate || cost.has(sku)) continue;
+      cost.set(sku, val * rate);
+    }
+    offset += resp.limit || resp.data.length || 10000;
+    if (!resp.data.length) break;
+  }
+  console.log(`  оптовых цен получено: ${cost.size}`);
+  return cost;
+}
+
+// Составные артикулы розничного прайса («brr123+md1173») — сумма компонентов
+function costOf(cost, sku) {
+  const s = String(sku || '').trim();
+  if (cost.has(s)) return cost.get(s);
+  if (!s.includes('+')) return null;
+  let sum = 0;
+  for (const part of s.split('+')) {
+    const c = cost.get(part.trim());
+    if (c === undefined) return null;
+    sum += c;
+  }
+  return sum;
+}
+
 // Действует ли акция сегодня (даты формата YYYY-MM-DD, включительно)
 function saleActive(item) {
   if (!item.sale_price || !(item.sale_price > 0)) return false;
@@ -201,6 +263,13 @@ if (entriesFetched < totalResults * 0.9) {
   process.exit(1);
 }
 
+// ─── 1а. Оптовые цены (закупка) для защиты от продажи в минус ─
+console.log(`Скачиваю оптовый прайс (минимальная наценка ${MIN_MARGIN_PERCENT}%)...`);
+const rates = await fetchRates();
+if (rates) console.log(`  курс НБУ: USD ${rates.USD.toFixed(2)}, EUR ${rates.EUR.toFixed(2)}`);
+const wholesale = rates ? await fetchWholesale(rates) : new Map();
+let raisedCount = 0, raisedMax = 0;
+
 // ─── 1б. Собираем карточки товаров из групп ─────────────────
 const products = [];
 const feedSkus = new Set();
@@ -224,6 +293,20 @@ for (const [sku, g] of bySku) {
       oldPrice = price;
       price = salePrice;
       saleCount++;
+    }
+  }
+
+  // Пол цены: закупка + минимальная наценка. Ниже не опускаемся никогда —
+  // ни из-за акции поставщика, ни из-за скачка курса.
+  const costUah = costOf(wholesale, sku);
+  if (costUah) {
+    const floor = Math.ceil(costUah * (1 + MIN_MARGIN_PERCENT / 100));
+    if (price < floor) {
+      raisedCount++;
+      raisedMax = Math.max(raisedMax, floor - price);
+      price = floor;
+      // «Стара ціна» ниже новой — это уже не скидка, убираем
+      if (oldPrice && oldPrice <= price) oldPrice = null;
     }
   }
 
@@ -275,6 +358,10 @@ for (const [sku, g] of bySku) {
     parent_id: parentId,
     short_title: (item.short_title || '').trim() || null,
   });
+}
+
+if (wholesale.size) {
+  console.log(`\nЗащита цен: поднято до порога закупка+${MIN_MARGIN_PERCENT}% — ${raisedCount} товаров (максимум +${raisedMax} грн)`);
 }
 
 // ─── 2. Статистика ──────────────────────────────────────────
