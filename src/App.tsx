@@ -227,6 +227,104 @@ const ProductBadge = ({ type }: { type?: string }) => {
 
 
 
+// ─── Акції та новинки (тільки на головній) ──────────────────
+// Горизонтальний ряд карток. Верстка спрощена відносно сітки каталогу:
+// без адмін-кнопок і анімацій появи — це вітрина, а не робочий список.
+const ShowcaseRow = ({ title, icon, items, onOpen, onAdd }: {
+  title: string;
+  icon: React.ReactNode;
+  items: Product[];
+  onOpen: (id: number) => void;
+  onAdd: (p: Product) => void;
+}) => {
+  if (items.length === 0) return null;
+  return (
+    <section className="mt-6">
+      <h2 className="flex items-center gap-2 text-lg font-black text-slate-900 mb-3">{icon}{title}</h2>
+      <div className="flex gap-3 overflow-x-auto pb-2 snap-x">
+        {items.map((p) => (
+          <div
+            key={p.id}
+            onClick={() => onOpen(p.id)}
+            className="snap-start shrink-0 w-[45%] sm:w-[190px] bg-white border rounded-2xl p-3 flex flex-col justify-between relative cursor-pointer hover:shadow-xl transition-shadow group"
+          >
+            <DiscountBadge oldPrice={p.old_price} price={p.price} />
+            <div className="aspect-square w-full overflow-hidden rounded-xl bg-slate-50">
+              <img
+                src={thumbUrl(firstImg(p.images, p.category), 400)}
+                alt={p.name}
+                width={400}
+                height={400}
+                loading="lazy"
+                decoding="async"
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                onError={imgError(p.category)}
+              />
+            </div>
+            <div className="mt-2 flex flex-col flex-grow justify-between">
+              <h3 className="text-xs text-slate-800 line-clamp-2 min-h-[32px] font-medium group-hover:text-purple-700 transition-colors">{p.name}</h3>
+              <div className="mt-1">
+                {p.old_price && p.old_price > p.price && (
+                  <span className="block text-[10px] text-slate-400 line-through">{p.old_price} ₴</span>
+                )}
+                <span className="text-sm font-black text-slate-900">{p.price} ₴</span>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={(e) => { e.stopPropagation(); onAdd(p); }}
+                  className="mt-2 w-full bg-purple-600 text-white py-2 rounded-lg text-[11px] font-bold hover:bg-purple-700 transition flex items-center justify-center gap-1 min-h-[36px]"
+                >
+                  <ShoppingCart className="w-3 h-3" /> Купити
+                </motion.button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+const HomeShowcase = ({ onOpen, onAdd }: { onOpen: (id: number) => void; onAdd: (p: Product) => void }) => {
+  const [sale, setSale] = useState<Product[]>([]);
+  const [fresh, setFresh] = useState<Product[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      // id зростає з кожним імпортом, тож «за id вниз» = найновіші товари
+      // (дешевше, ніж сортування по created_at — індекс первинного ключа).
+      const base = () => supabase.from('products').select('*')
+        .not('available', 'is', false)
+        .order('id', { ascending: false });
+      const [s, n] = await Promise.all([
+        base().not('old_price', 'is', null).limit(80),
+        base().limit(80),
+      ]);
+      // У каталозі багато варіантів одного товару (колір, розмір) з однаковою
+      // назвою — на вітрині показуємо кожну назву один раз.
+      const uniqByName = (rows: Product[], skip = new Set<number>()) => {
+        const seen = new Set<string>();
+        return rows.filter((p) => {
+          if (skip.has(p.id) || seen.has(p.name)) return false;
+          seen.add(p.name);
+          return true;
+        });
+      };
+      const discount = (p: Product) => (p.old_price ? (p.old_price - p.price) / p.old_price : 0);
+      const saleItems = uniqByName(((s.data as Product[]) || []).sort((a, b) => discount(b) - discount(a))).slice(0, 12);
+      setSale(saleItems);
+      const saleIds = new Set(saleItems.map((p) => p.id));
+      setFresh(uniqByName((n.data as Product[]) || [], saleIds).slice(0, 12));
+    })();
+  }, []);
+
+  return (
+    <>
+      <ShowcaseRow title="Акції" icon={<Percent className="h-5 w-5 text-red-500" />} items={sale} onOpen={onOpen} onAdd={onAdd} />
+      <ShowcaseRow title="Новинки" icon={<Sparkles className="h-5 w-5 text-sky-500" />} items={fresh} onOpen={onOpen} onAdd={onAdd} />
+    </>
+  );
+};
+
 // ─── Info Tabs Content ──────────────────────────────────────
 const InfoTabs = () => {
   const [activeTab, setActiveTab] = useState('delivery');
@@ -1723,6 +1821,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           )}
 
           <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
+            {/* Акції та новинки — тільки на головній */}
+            {!showProducts && (
+              <HomeShowcase onOpen={(id) => setActiveProductId(id)} onAdd={addToCart} />
+            )}
+
             {/* Products Grid */}
             {showProducts && (isLoading ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3">
