@@ -141,7 +141,28 @@ async function apiGet(path, attempt = 1) {
 // иногда роняет розницу ниже нашего опта — так товар уходит в минус.
 // Поэтому тянем оптовый прайс и не даём цене опуститься ниже
 // закупка × (1 + MIN_MARGIN_PERCENT/100).
+// Поріг ціни: закупівля + 15%, але не менше ніж +150 грн прибутку.
+// Стеля × 2 — щоб дрібниця (лампочка за 8 грн) не злетіла до 158 грн.
 const MIN_MARGIN_PERCENT = Number(process.env.DDAUDIO_MIN_MARGIN_PERCENT || 15);
+const MIN_MARGIN_UAH = Number(process.env.DDAUDIO_MIN_MARGIN_UAH || 150);
+const MAX_MULTIPLIER = Number(process.env.DDAUDIO_MAX_MULTIPLIER || 2);
+
+const priceFloor = (costUah) =>
+  Math.ceil(Math.max(
+    costUah * (1 + MIN_MARGIN_PERCENT / 100),
+    Math.min(costUah + MIN_MARGIN_UAH, costUah * MAX_MULTIPLIER),
+  ));
+
+// node scripts/ddaudio-import.mjs --self-check
+if (process.argv.includes('--self-check')) {
+  const { strict: assert } = await import('node:assert');
+  assert.equal(priceFloor(8), 16);        // дрібниця: стеля ×2, а не +150
+  assert.equal(priceFloor(139.05), 279);  // бризковики: +150 дешевше за ×2
+  assert.equal(priceFloor(1000), 1150);   // дорогий товар: працює 15%
+  assert.equal(priceFloor(500), 650);     // межа: +150 ще виграє у 15%
+  console.log('ok');
+  process.exit(0);
+}
 
 async function fetchRates() {
   // Курс НБУ; при недоступности — пропускаем защиту, а не ломаем импорт
@@ -264,7 +285,7 @@ if (entriesFetched < totalResults * 0.9) {
 }
 
 // ─── 1а. Оптовые цены (закупка) для защиты от продажи в минус ─
-console.log(`Скачиваю оптовый прайс (минимальная наценка ${MIN_MARGIN_PERCENT}%)...`);
+console.log(`Скачиваю оптовый прайс (порог: закупка +${MIN_MARGIN_PERCENT}% или +${MIN_MARGIN_UAH} грн, но не дороже ×${MAX_MULTIPLIER})...`);
 const rates = await fetchRates();
 if (rates) console.log(`  курс НБУ: USD ${rates.USD.toFixed(2)}, EUR ${rates.EUR.toFixed(2)}`);
 const wholesale = rates ? await fetchWholesale(rates) : new Map();
@@ -300,7 +321,7 @@ for (const [sku, g] of bySku) {
   // ни из-за акции поставщика, ни из-за скачка курса.
   const costUah = costOf(wholesale, sku);
   if (costUah) {
-    const floor = Math.ceil(costUah * (1 + MIN_MARGIN_PERCENT / 100));
+    const floor = priceFloor(costUah);
     if (price < floor) {
       raisedCount++;
       raisedMax = Math.max(raisedMax, floor - price);
@@ -361,7 +382,7 @@ for (const [sku, g] of bySku) {
 }
 
 if (wholesale.size) {
-  console.log(`\nЗащита цен: поднято до порога закупка+${MIN_MARGIN_PERCENT}% — ${raisedCount} товаров (максимум +${raisedMax} грн)`);
+  console.log(`\nЗащита цен: поднято ${raisedCount} товаров (максимум +${raisedMax} грн)`);
 }
 
 // ─── 2. Статистика ──────────────────────────────────────────
