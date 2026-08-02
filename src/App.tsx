@@ -1132,7 +1132,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const [formBadge, setFormBadge] = useState<'hot' | 'sale' | 'top' | 'new' | undefined>(undefined);
 
   const [revAuthor, setRevAuthor] = useState('');
-  const [revRating] = useState(5);
+  const [revRating, setRevRating] = useState(5);
   const [revText, setRevText] = useState('');
 
   // ─── Data Loading ─────────────────────────────────────────
@@ -1357,6 +1357,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     [activeProductId, products, directProduct]
   );
   const currentProductReviews = useMemo(() => reviews.filter(r => r.product_id === activeProductId), [reviews, activeProductId]);
+  // Рейтинг рахуємо з реальних відгуків. Немає відгуків — немає й зірок.
+  const currentRating = currentProductReviews.length
+    ? currentProductReviews.reduce((s, r) => s + r.rating, 0) / currentProductReviews.length
+    : 0;
 
   // ─── Admin ────────────────────────────────────────────────
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -1575,7 +1579,14 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                           className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-purple-50 transition-colors"
                         >
                           <img src={p.images?.[0] ? thumbUrl(p.images[0], 100) : undefined} alt={p.name} width={44} height={44} loading="lazy" decoding="async" className="w-11 h-11 rounded-lg object-cover bg-slate-100 shrink-0" />
-                          <span className="flex-1 text-sm text-slate-800 line-clamp-2 min-w-0">{p.name}</span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-sm text-slate-800 line-clamp-2">{p.name}</span>
+                            {/* Назви в каталозі повторюються (той самий товар під різні авто) —
+                                без марки підказки виглядають як дублі */}
+                            {p.compatibility && (
+                              <span className="block text-[11px] text-slate-500 line-clamp-1">{p.compatibility}</span>
+                            )}
+                          </span>
                           <span className="shrink-0 text-right">
                             {p.old_price && <span className="block text-[11px] text-slate-400 line-through">{p.old_price} ₴</span>}
                             <span className="text-sm font-bold text-purple-700">{p.price} ₴</span>
@@ -2173,10 +2184,18 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 <span className="inline-block bg-purple-50 text-purple-700 text-[10px] font-bold px-3 py-1 rounded-full mb-3">{currentProduct.category}</span>
                 <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight mb-3">{currentProduct.name}</h1>
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="flex text-amber-400">
-                    {[...Array(5)].map((_, i) => <Star key={i} className={`h-4 w-4 ${i < 4 ? 'fill-current' : ''}`} />)}
-                  </div>
-                  <span className="text-xs text-slate-500">({currentProductReviews.length} відгуків)</span>
+                  {currentProductReviews.length > 0 ? (
+                    <>
+                      <div className="flex text-amber-400">
+                        {[...Array(5)].map((_, i) => <Star key={i} className={`h-4 w-4 ${i < Math.round(currentRating) ? 'fill-current' : 'text-slate-300'}`} />)}
+                      </div>
+                      <span className="text-xs text-slate-500">
+                        {currentRating.toFixed(1)} · {currentProductReviews.length} відгуків
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-slate-400">Ще немає відгуків</span>
+                  )}
                 </div>
                 <div className="bg-gradient-to-br from-slate-50 to-purple-50/30 border border-purple-100 rounded-2xl p-5 mb-4">
                   <div className="flex items-baseline gap-3">
@@ -2280,6 +2299,14 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </div>
               </div>
               <form onSubmit={handleAddReview} className="border-t pt-4 space-y-2 text-xs mt-4">
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-500 mr-1">Оцінка:</span>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} type="button" onClick={() => setRevRating(n)} aria-label={`${n} з 5`} className="p-0.5">
+                      <Star className={`h-4 w-4 ${n <= revRating ? 'text-amber-400 fill-current' : 'text-slate-300'}`} />
+                    </button>
+                  ))}
+                </div>
                 <input type="text" placeholder="Ваше ім\u2019я" value={revAuthor} onChange={e => setRevAuthor(e.target.value)} className="p-2.5 border rounded-lg w-full bg-white outline-none focus:border-purple-500 transition" />
                 <textarea placeholder="Текст відгуку..." rows={2} value={revText} onChange={e => setRevText(e.target.value)} className="p-2.5 border rounded-lg w-full bg-white outline-none focus:border-purple-500 transition" />
                 <motion.button whileTap={{ scale: 0.98 }} type="submit" className="w-full bg-purple-100 text-purple-700 py-2 rounded-lg font-bold hover:bg-purple-200 transition flex items-center justify-center gap-1">
