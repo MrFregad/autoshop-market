@@ -847,7 +847,9 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
           <select value={mark} onChange={(e) => { setMark(e.target.value); setModel(''); }} className={selectCls}>
-            <option value="">— Марка —</option>
+            {/* Довідник авто вантажиться окремим запитом — поки він порожній,
+                це видно, а не виглядає як зламаний список */}
+            <option value="">{Object.keys(carData).length ? '— Марка —' : 'Завантаження марок…'}</option>
             {Object.keys(carData).map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
           <select value={model} onChange={(e) => setModel(e.target.value)} disabled={!mark} className={selectCls}>
@@ -880,9 +882,10 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
-            disabled={!mark && !cat}
+            // Без disabled: якщо марка не встигла обратись, кнопка мовчки нічого
+            // не робила — тепер завжди є реакція (відкриється каталог).
             onClick={() => (mark || cat) ? onPick({ mark, model, category: cat, subcategory: sub }) : onBrowse()}
-            className="w-full rounded-xl bg-purple-700 px-4 py-3 text-sm font-black text-white shadow-lg hover:bg-purple-800 transition disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 sm:col-span-2 lg:col-span-1"
+            className="w-full rounded-xl bg-purple-700 px-4 py-3 text-sm font-black text-white shadow-lg hover:bg-purple-800 transition flex items-center justify-center gap-2 sm:col-span-2 lg:col-span-1"
           >
             <Search className="h-4 w-4" /> Показати товари
           </motion.button>
@@ -1194,7 +1197,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   // Признак «есть активный фильтр» — показываем товары (а не главную)
   const isSearching = searchQuery.trim() !== '';
   const hasCarFilter = carMark !== '';
-  const hasFilter = isAdminMode || selectedCategory !== 'Усі' || isSearching || hasCarFilter;
+  // ?page=2 без інших фільтрів — це теж каталог (усі товари), а не головна:
+  // інакше друга сторінка з адреси викидала на головну й Гугл її не бачив.
+  const hasFilter = isAdminMode || selectedCategory !== 'Усі' || isSearching || hasCarFilter
+    || searchParams.has('page');
 
   // Серверная пагинация: грузим только текущую страницу выбранного фильтра.
   // Каталог большой (десятки тысяч товаров) — грузить всё в браузер нельзя.
@@ -1298,11 +1304,40 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   // ─── Search & Filter ──────────────────────────────────────
+  // «Passat B5» у пошуку — це авто, а не назва товару: у назвах товарів
+  // моделей немає (сумісність лежить в marks/models), тому текстовий пошук
+  // за моделлю давав нуль. Такий запит перекидаємо в підбір за авто.
+  const findCar = (query: string): { mark: string; model: string } | null => {
+    const words = query.toLowerCase().split(/[\s,]+/).filter(Boolean);
+    // Слово має збігтися цілком, інакше «eva» ловила б Chevrolet Evanda
+    const matches = (name: string) => {
+      const nameWords = name.toLowerCase().split(/[\s,]+/);
+      return words.every(w => nameWords.includes(w));
+    };
+    for (const [mark, models] of Object.entries(carData)) {
+      const hits = models.filter(matches);
+      // Кілька поколінь під запит («Golf») — лишаємо марку, покоління обере сам
+      if (hits.length === 1) return { mark, model: hits[0] };
+      if (hits.length > 1 || matches(mark)) return { mark, model: '' };
+    }
+    return null;
+  };
+
   // Вхід в адмінку: пароль вводиться в рядок пошуку, перевіряється на сервері
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const query = searchQuery.trim();
     if (!query || isAdminMode) return;
+    const car = findCar(query);
+    if (car) {
+      setSearchQuery('');
+      setIsSearchDropdownOpen(false);
+      openCategory('Усі', null, car);
+      requestAnimationFrame(() => {
+        document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      return;
+    }
     try {
       const resp = await fetch('/api/admin', {
         method: 'POST',
@@ -1320,7 +1355,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     } catch { /* не пароль — звичайний пошук */ }
     // Обычный поиск: закрываем выпадающий список и показываем полную сетку результатов
     setIsSearchDropdownOpen(false);
-    setActiveProductId(null);
+    if (activeProductId) setActiveProductId(null); // інакше navigate('/') змив би підбір за авто
     requestAnimationFrame(() => {
       document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
