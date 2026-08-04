@@ -11,7 +11,7 @@ import {
   CarFront, Armchair, Wind, ShieldCheck, RotateCcw, BadgeCheck,
   HelpCircle, ChevronDown, PhoneCall, ClipboardList, Package, Grid3x3
 } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router';
+import { useNavigate, useLocation, useSearchParams, Link } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
@@ -1085,17 +1085,45 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const catMatch = location.pathname.match(/^\/category\/([^/]+)(?:\/([^/]+))?/);
   const selectedCategory = catMatch ? slugToCategory(catMatch[1]) : 'Усі';
   const selectedSubcategory = catMatch?.[2] ? decodeURIComponent(catMatch[2]) : null;
-  const openCategory = (category: string, subcategory?: string | null) => {
-    if (category === 'Усі') return navigate('/');
-    navigate(`/category/${categorySlug(category)}${subcategory ? `/${encodeURIComponent(subcategory)}` : ''}`);
+  // Підбір за авто їде разом з категорією — інакше вибір моделі губився
+  // при переході в іншу категорію.
+  const openCategory = (
+    category: string,
+    subcategory?: string | null,
+    car: { mark: string; model: string } = { mark: carMark, model: carModel },
+  ) => {
+    const qs = new URLSearchParams();
+    if (car.mark) qs.set('mark', car.mark);
+    if (car.model) qs.set('model', car.model);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    if (category === 'Усі') return navigate(`/${suffix}`);
+    navigate(`/category/${categorySlug(category)}${subcategory ? `/${encodeURIComponent(subcategory)}` : ''}${suffix}`);
   };
   // «Підбір за авто»: справочник марка → модели (таблица car_models,
-  // её пересобирает импорт DD Audio) и выбранные значения фильтра
+  // её пересобирает импорт DD Audio)
   const [carData, setCarData] = useState<Record<string, string[]>>({});
-  const [carMark, setCarMark] = useState('');
-  const [carModel, setCarModel] = useState('');
   const [totalCount, setTotalCount] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
+  // Сторінка і підбір за авто живуть в URL (?page=2&mark=…&model=…), а не в
+  // стані: інакше перезавантаження, «назад» чи надіслане посилання скидали
+  // фільтр на головну, а Гугл взагалі не бачив каталог далі першої сторінки.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentPage = Math.max(1, Number(searchParams.get('page')) || 1);
+  const carMark = searchParams.get('mark') || '';
+  const carModel = searchParams.get('model') || '';
+  const setCarFilter = (mark: string, model: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (mark) next.set('mark', mark); else next.delete('mark');
+    if (model) next.set('model', model); else next.delete('model');
+    next.delete('page'); // новий фільтр — з першої сторінки
+    setSearchParams(next);
+  };
+  // Посилання на сторінку каталогу: звичайний href, щоб його бачив Гугл
+  const pageHref = (p: number) => {
+    const next = new URLSearchParams(searchParams);
+    if (p > 1) next.set('page', String(p)); else next.delete('page');
+    const qs = next.toString();
+    return `${location.pathname}${qs ? `?${qs}` : ''}`;
+  };
   const PRODUCTS_PER_PAGE = 18;
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -1302,10 +1330,12 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const paginatedProducts = products;
   const totalPages = Math.max(1, Math.ceil(totalCount / PRODUCTS_PER_PAGE));
 
-  // Сброс на первую страницу при смене категории/подкатегории/поиска/авто
+  // Нова сторінка — до початку списку, а не туди, де стояла кнопка «2»
   useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedCategory, selectedSubcategory, searchQuery, carMark, carModel]);
+    if (currentPage > 1) {
+      document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [currentPage]);
 
   // Закрываем выпадающий список поиска при клике вне его
   useEffect(() => {
@@ -1319,12 +1349,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   }, []);
 
   // Логотип і «Головна» в хлібних крихтах — повне повернення на головну.
-  // Скидаємо і підбір за авто: інакше фільтр лишався активним і замість
-  // головної далі показувався каталог.
+  // Скидаємо і підбір за авто (він у query): інакше фільтр лишався активним
+  // і замість головної далі показувався каталог.
   const goHome = () => {
     setSearchQuery('');
-    setCarMark('');
-    setCarModel('');
     navigate('/');
   };
 
@@ -1551,7 +1579,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             <form onSubmit={handleSearchSubmit} className="flex items-center border border-slate-300 rounded-xl bg-slate-50 focus-within:border-purple-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-purple-100 transition-all">
               <input
                 type="text" placeholder="Пошук товарів..." value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setIsSearchDropdownOpen(e.target.value.trim() !== ''); }}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearchDropdownOpen(e.target.value.trim() !== '');
+                  if (currentPage > 1) setSearchParams(p => { p.delete('page'); return p; }, { replace: true });
+                }}
                 onFocus={() => { if (searchQuery.trim() !== '') setIsSearchDropdownOpen(true); }}
                 className="w-full bg-transparent py-2.5 px-3 text-sm outline-none text-slate-900"
               />
@@ -1738,9 +1770,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               carData={carData}
               onPick={({ mark, model, category, subcategory }) => {
                 setSearchQuery('');
-                setCarMark(mark);
-                setCarModel(model);
-                if (category) openCategory(category, subcategory || null);
+                openCategory(category || 'Усі', subcategory || null, { mark, model });
                 requestAnimationFrame(() => {
                   document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 });
@@ -1757,7 +1787,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </span>
                 <select
                   value={carMark}
-                  onChange={(e) => { setCarMark(e.target.value); setCarModel(''); }}
+                  onChange={(e) => setCarFilter(e.target.value, '')}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 focus:border-purple-500 focus:outline-none"
                 >
                   <option value="">Марка авто</option>
@@ -1767,7 +1797,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </select>
                 <select
                   value={carModel}
-                  onChange={(e) => setCarModel(e.target.value)}
+                  onChange={(e) => setCarFilter(carMark, e.target.value)}
                   disabled={!carMark}
                   className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 focus:border-purple-500 focus:outline-none disabled:opacity-50 max-w-[280px]"
                 >
@@ -1778,7 +1808,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </select>
                 {carMark && (
                   <button
-                    onClick={() => { setCarMark(''); setCarModel(''); }}
+                    onClick={() => setCarFilter('', '')}
                     className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-red-500 transition-colors"
                   >
                     <X className="h-3.5 w-3.5" /> Скинути
@@ -1929,39 +1959,34 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 addPage(totalPages);
                 return pages;
               };
+              const arrowCls = 'p-2 rounded-lg border bg-white hover:bg-slate-50 transition min-w-[36px] min-h-[36px] flex items-center justify-center';
               return (
                 <div className="flex items-center justify-center gap-1.5 mt-8 flex-wrap">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="p-2 rounded-lg border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition min-w-[36px] min-h-[36px] flex items-center justify-center"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
+                  {currentPage === 1
+                    ? <span className={`${arrowCls} opacity-40`}><ChevronLeft className="h-4 w-4" /></span>
+                    : <Link to={pageHref(currentPage - 1)} aria-label="Попередня сторінка" rel="prev" className={arrowCls}><ChevronLeft className="h-4 w-4" /></Link>}
                   {getPages().map((page, i) =>
                     page === '...'
                       ? <span key={`ellipsis-${i}`} className="w-8 text-center text-slate-400 text-xs">…</span>
                       : (
-                        <button
+                        <Link
                           key={page}
-                          onClick={() => setCurrentPage(page as number)}
-                          className={`w-9 h-9 rounded-lg text-xs font-bold transition ${
+                          to={pageHref(page as number)}
+                          aria-label={`Сторінка ${page}`}
+                          aria-current={currentPage === page ? 'page' : undefined}
+                          className={`w-9 h-9 rounded-lg text-xs font-bold transition flex items-center justify-center ${
                             currentPage === page
                               ? 'bg-purple-600 text-white'
                               : 'bg-white border text-slate-600 hover:bg-slate-50'
                           }`}
                         >
                           {page}
-                        </button>
+                        </Link>
                       )
                   )}
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="p-2 rounded-lg border bg-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 transition min-w-[36px] min-h-[36px] flex items-center justify-center"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
+                  {currentPage === totalPages
+                    ? <span className={`${arrowCls} opacity-40`}><ChevronRight className="h-4 w-4" /></span>
+                    : <Link to={pageHref(currentPage + 1)} aria-label="Наступна сторінка" rel="next" className={arrowCls}><ChevronRight className="h-4 w-4" /></Link>}
                 </div>
               );
             })()}
