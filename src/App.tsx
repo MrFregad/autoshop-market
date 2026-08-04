@@ -311,10 +311,16 @@ const HomeShowcase = ({ onOpen, onAdd }: { onOpen: (id: number) => void; onAdd: 
         });
       };
       const discount = (p: Product) => (p.old_price ? (p.old_price - p.price) / p.old_price : 0);
-      const saleItems = uniqByName(((s.data as Product[]) || []).sort((a, b) => discount(b) - discount(a))).slice(0, 12);
+      const freshRows = (n.data as Product[]) || [];
+      // Запит акцій іноді падав по таймауту (500) — тоді вітрина «Акції»
+      // мовчки зникала з головної. Постійне рішення — індекс
+      // products_sale_idx (supabase/products_indexes.sql), а тут страховка:
+      // беремо знижені товари з уже завантаженої вибірки новинок.
+      const saleRows = (s.data as Product[]) || freshRows.filter((p) => p.old_price != null);
+      const saleItems = uniqByName(saleRows.sort((a, b) => discount(b) - discount(a))).slice(0, 12);
       setSale(saleItems);
       const saleIds = new Set(saleItems.map((p) => p.id));
-      setFresh(uniqByName((n.data as Product[]) || [], saleIds).slice(0, 12));
+      setFresh(uniqByName(freshRows, saleIds).slice(0, 12));
     })();
   }, []);
 
@@ -742,8 +748,39 @@ const allCategories = [...Object.keys(catalogTree), ...chemistryCategories, 'Б�
 const categorySlug = (name: string) => encodeURIComponent(name.replace(/\//g, '-'));
 const slugToCategory = (slug: string) => {
   const decoded = decodeURIComponent(slug);
-  return allCategories.find((c) => c.replace(/\//g, '-') === decoded) ?? 'Усі';
+  return allCategories.find((c) => c.replace(/\//g, '-') === decoded)
+    ?? allCategories.find((c) => toSlug(c) === toSlug(decoded))
+    ?? 'Усі';
 };
+
+// ─── Адреси каталогу за авто ────────────────────────────────
+// /catalog/<марка>/<модель>/<категорія>/<підкатегорія> — у кожної підбірки
+// власна сторінка. Раніше підбір жив у query на корені (/?mark=…&model=…):
+// посилання працювало, але для Гугла це та сама головна з canonical на «/»,
+// тож жодна сторінка каталогу в індекс не потрапляла.
+//
+// У шляху — «людський» варіант назви: «Volkswagen Passat B5 1997-2005» →
+// «volkswagen-passat-b5-1997-2005». Зворотне перетворення робиться пошуком
+// по довіднику авто, тому й скорочені адреси на кшталт
+// /catalog/volkswagen/passat-b5 знаходять потрібне покоління.
+// Лишаємо тільки літери й цифри: «Chery Lynk & Co 01 (CX11)» дало б у шляху
+// сирий «&», який ламає і адресу, і XML карти сайту.
+const toSlug = (s: string) =>
+  String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
+
+// Заглушка для пропущеного сегмента: адреса позиційна, тож «будь-яка модель,
+// але конкретна категорія» — це /catalog/volkswagen/usi/kylymky
+const ANY_SEGMENT = 'usi';
+
+const catalogPath = (parts: (string | null | undefined)[]) => {
+  const seg = parts.map((p) => p || '');
+  while (seg.length && !seg[seg.length - 1]) seg.pop();
+  if (!seg.length) return '/catalog';
+  return '/catalog/' + seg.map((p) => (p ? toSlug(p) : ANY_SEGMENT)).join('/');
+};
+
+const subFromSlug = (category: string, slug: string) =>
+  (catalogTree[category] || []).find((s) => toSlug(s) === toSlug(slug)) ?? slug;
 
 // Найбільші категорії каталогу — клік веде у каталог з фільтром
 const heroCategories = [
@@ -839,24 +876,39 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
       </motion.div>
 
       {/* Рядок підбору: Марка / Модель / Категорія / Підкатегорія / Показати */}
-      <motion.div
+      <motion.form
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.15 }}
+        // Значення беремо з самої форми, а не зі стану React. Стан і те, що
+        // видно у списках, могло розійтися: браузер відновлює вибір у <select>
+        // після «назад»/перезавантаження, не повідомляючи React, — і кнопка
+        // мовчки нічого не робила при, здавалося б, заповнених полях.
+        // FormData завжди читає те, що покупець бачить на екрані.
+        onSubmit={(e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          const val = (k: string) => String(f.get(k) ?? '');
+          const picked = { mark: val('mark'), model: val('model'), category: val('cat'), subcategory: val('sub') };
+          if (picked.mark || picked.category) onPick(picked);
+          else onBrowse();
+        }}
         className="mt-8 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 p-3 sm:p-4 shadow-2xl shadow-orange-900/30"
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
-          <select value={mark} onChange={(e) => { setMark(e.target.value); setModel(''); }} className={selectCls}>
+          <select name="mark" value={mark} onChange={(e) => { setMark(e.target.value); setModel(''); }} className={selectCls}>
             {/* Довідник авто вантажиться окремим запитом — поки він порожній,
                 це видно, а не виглядає як зламаний список */}
             <option value="">{Object.keys(carData).length ? '— Марка —' : 'Завантаження марок…'}</option>
             {Object.keys(carData).map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-          <select value={model} onChange={(e) => setModel(e.target.value)} disabled={!mark} className={selectCls}>
-            <option value="">— Модель —</option>
+          {/* Без disabled: вимкнене поле не потрапляє у FormData, і вибрана
+              модель губилась би при відправці форми */}
+          <select name="model" value={model} onChange={(e) => setModel(e.target.value)} className={selectCls}>
+            <option value="">{mark ? '— Модель —' : '— Спочатку марка —'}</option>
             {(carData[mark] || []).map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-          <select value={cat} onChange={(e) => { setCat(e.target.value); setSub(''); }} className={selectCls}>
+          <select name="cat" value={cat} onChange={(e) => { setCat(e.target.value); setSub(''); }} className={selectCls}>
             <option value="">— Категорія —</option>
             {Object.keys(catalogTree).map((c) => {
               // Коли авто вибрано — показуємо кількість товарів, порожні категорії блокуємо
@@ -868,7 +920,7 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
               );
             })}
           </select>
-          <select value={sub} onChange={(e) => setSub(e.target.value)} disabled={!cat || !(catalogTree[cat] || []).length} className={selectCls}>
+          <select name="sub" value={sub} onChange={(e) => setSub(e.target.value)} className={selectCls}>
             <option value="">— Підкатегорія —</option>
             {(catalogTree[cat] || []).map((s) => {
               const n = availCats && cat ? (availCats[cat]?.[s] || 0) : null;
@@ -880,17 +932,15 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
             })}
           </select>
           <motion.button
+            type="submit"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
-            // Без disabled: якщо марка не встигла обратись, кнопка мовчки нічого
-            // не робила — тепер завжди є реакція (відкриється каталог).
-            onClick={() => (mark || cat) ? onPick({ mark, model, category: cat, subcategory: sub }) : onBrowse()}
             className="w-full rounded-xl bg-purple-700 px-4 py-3 text-sm font-black text-white shadow-lg hover:bg-purple-800 transition flex items-center justify-center gap-2 sm:col-span-2 lg:col-span-1"
           >
             <Search className="h-4 w-4" /> Показати товари
           </motion.button>
         </div>
-      </motion.div>
+      </motion.form>
 
       {/* Автохімія Koch Chemie — власний склад, швидкий перехід у категорії */}
       <motion.div
@@ -1079,15 +1129,72 @@ useProductStructuredData(activeProduct);
 const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   activeProduct?.images?.[0] || ''
 );
-  const [searchQuery, setSearchQuery] = useState('');
+  // Що показувати — цілком визначається адресою: сторінка, підбір за авто,
+  // категорія і пошуковий запит. Раніше частина цього жила в стані, тож
+  // перезавантаження, «назад» чи надіслане посилання скидали все на головну,
+  // а Гугл не бачив каталог далі першої сторінки.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentPage = Math.max(1, Number(searchParams.get('page')) || 1);
+
+  // Пошуковий запит живе в адресі: /search?q=... — посилання на результати
+  // можна надіслати, «назад» повертає до попереднього запиту, а Гугл бачить
+  // окрему сторінку замість головної. Поле вводу лишається локальним станом
+  // (щоб не переписувати адресу на кожну літеру) і синхронізується з ?q=.
+  const urlQuery = location.pathname === '/search' ? (searchParams.get('q') || '') : '';
+  const [searchQuery, setSearchQuery] = useState(urlQuery);
+  // Адреса змінилась (перехід, «назад») — підтягуємо поле під неї. Робимо це
+  // під час рендера, а не в useEffect: так React не малює зайвий кадр зі
+  // старим запитом у полі.
+  const [syncedQuery, setSyncedQuery] = useState(urlQuery);
+  if (syncedQuery !== urlQuery) { setSyncedQuery(urlQuery); setSearchQuery(urlQuery); }
   // Выпадающий список результатов под полем поиска
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const searchBoxRef = useRef<HTMLDivElement>(null);
-  // Категорія і підкатегорія живуть в URL: /category/Килимки[/Килимки EVA…] —
-  // у кожної категорії своя сторінка, посилання можна кидати в рекламу.
+
+  // «Підбір за авто»: справочник марка → модели (таблица car_models,
+  // её пересобирает импорт DD Audio)
+  const [carData, setCarData] = useState<Record<string, string[]>>({});
+  const [totalCount, setTotalCount] = useState(0);
+
+  // /catalog/<марка>/<модель>/<категорія>/<підкатегорія>
+  const catalogMatch = location.pathname.match(
+    /^\/catalog(?:\/([^/]+))?(?:\/([^/]+))?(?:\/([^/]+))?(?:\/([^/]+))?\/?$/
+  );
+  const isCatalogPath = catalogMatch !== null;
+  const seg = (i: number) => {
+    const raw = catalogMatch?.[i];
+    return !raw || raw === ANY_SEGMENT ? '' : decodeURIComponent(raw);
+  };
+
+  // Сегменти адреси зіставляємо з довідником авто — тому працюють і короткі
+  // адреси: /catalog/volkswagen/passat-b5 знайде «Volkswagen Passat B5
+  // 1997-2005». ?mark=&model= на корені лишаємо: за такими посиланнями вже
+  // ходять з реклами й пошуку.
+  const rawMark = isCatalogPath ? seg(1) : (searchParams.get('mark') || '');
+  const rawModel = isCatalogPath ? seg(2) : (searchParams.get('model') || '');
+  const markKeys = Object.keys(carData);
+  const carMark = !rawMark ? ''
+    : markKeys.find((k) => k === rawMark)
+      || markKeys.find((k) => toSlug(k) === toSlug(rawMark))
+      || rawMark;
+  const modelList = carData[carMark] || [];
+  const carModel = !rawModel ? ''
+    : modelList.find((m) => m === rawModel)
+      || modelList.find((m) => toSlug(m) === toSlug(rawModel))
+      || modelList.find((m) => toSlug(m).includes(toSlug(rawModel)))
+      || rawModel;
+  // Довідник ще не приїхав — марку з адреси нема з чим звіряти
+  const carPending = isCatalogPath && rawMark !== '' && markKeys.length === 0;
+
+  // Категорія: власна сторінка /category/<назва> або сегмент у /catalog/
   const catMatch = location.pathname.match(/^\/category\/([^/]+)(?:\/([^/]+))?/);
-  const selectedCategory = catMatch ? slugToCategory(catMatch[1]) : 'Усі';
-  const selectedSubcategory = catMatch?.[2] ? decodeURIComponent(catMatch[2]) : null;
+  const selectedCategory = isCatalogPath
+    ? (seg(3) ? slugToCategory(seg(3)) : 'Усі')
+    : catMatch ? slugToCategory(catMatch[1]) : 'Усі';
+  const selectedSubcategory = isCatalogPath
+    ? (seg(4) ? subFromSlug(selectedCategory, seg(4)) : null)
+    : catMatch?.[2] ? decodeURIComponent(catMatch[2]) : null;
+
   // Підбір за авто їде разом з категорією — інакше вибір моделі губився
   // при переході в іншу категорію.
   const openCategory = (
@@ -1095,31 +1202,15 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     subcategory?: string | null,
     car: { mark: string; model: string } = { mark: carMark, model: carModel },
   ) => {
-    const qs = new URLSearchParams();
-    if (car.mark) qs.set('mark', car.mark);
-    if (car.model) qs.set('model', car.model);
-    const suffix = qs.toString() ? `?${qs}` : '';
-    if (category === 'Усі') return navigate(`/${suffix}`);
-    navigate(`/category/${categorySlug(category)}${subcategory ? `/${encodeURIComponent(subcategory)}` : ''}${suffix}`);
+    if (car.mark) {
+      return navigate(catalogPath([car.mark, car.model, category === 'Усі' ? '' : category, subcategory]));
+    }
+    if (category === 'Усі') return navigate('/catalog');
+    navigate(`/category/${categorySlug(category)}${subcategory ? `/${encodeURIComponent(subcategory)}` : ''}`);
   };
-  // «Підбір за авто»: справочник марка → модели (таблица car_models,
-  // её пересобирает импорт DD Audio)
-  const [carData, setCarData] = useState<Record<string, string[]>>({});
-  const [totalCount, setTotalCount] = useState(0);
-  // Сторінка і підбір за авто живуть в URL (?page=2&mark=…&model=…), а не в
-  // стані: інакше перезавантаження, «назад» чи надіслане посилання скидали
-  // фільтр на головну, а Гугл взагалі не бачив каталог далі першої сторінки.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const currentPage = Math.max(1, Number(searchParams.get('page')) || 1);
-  const carMark = searchParams.get('mark') || '';
-  const carModel = searchParams.get('model') || '';
-  const setCarFilter = (mark: string, model: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (mark) next.set('mark', mark); else next.delete('mark');
-    if (model) next.set('model', model); else next.delete('model');
-    next.delete('page'); // новий фільтр — з першої сторінки
-    setSearchParams(next);
-  };
+  // Зміна авто у шапці каталогу — той самий перехід, лише з іншим авто
+  const setCarFilter = (mark: string, model: string) =>
+    openCategory(selectedCategory, selectedSubcategory, { mark, model });
   // Посилання на сторінку каталогу: звичайний href, щоб його бачив Гугл
   const pageHref = (p: number) => {
     const next = new URLSearchParams(searchParams);
@@ -1199,8 +1290,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   const hasCarFilter = carMark !== '';
   // ?page=2 без інших фільтрів — це теж каталог (усі товари), а не головна:
   // інакше друга сторінка з адреси викидала на головну й Гугл її не бачив.
-  const hasFilter = isAdminMode || selectedCategory !== 'Усі' || isSearching || hasCarFilter
-    || searchParams.has('page');
+  const hasFilter = isAdminMode || isCatalogPath || selectedCategory !== 'Усі'
+    || isSearching || hasCarFilter || searchParams.has('page');
 
   // Серверная пагинация: грузим только текущую страницу выбранного фильтра.
   // Каталог большой (десятки тысяч товаров) — грузить всё в браузер нельзя.
@@ -1255,10 +1346,13 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   // Перезагружаем при смене фильтра/страницы (поиск — с дебаунсом).
   useEffect(() => {
     if (!hasFilter) { setProducts([]); setTotalCount(0); setIsLoading(false); return; }
+    // Марка з адреси ще не звірена з довідником — інакше «volkswagen» пішов би
+    // у базу як є і сторінка кліпнула б «товарів не знайдено»
+    if (carPending) { setIsLoading(true); return; }
     const t = setTimeout(fetchProducts, isSearching ? 350 : 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, selectedSubcategory, searchQuery, currentPage, isAdminMode, carMark, carModel]);
+  }, [selectedCategory, selectedSubcategory, searchQuery, currentPage, isAdminMode, carMark, carModel, carPending]);
 
   const fetchReviews = async () => {
     const { data, error } = await supabase.from('reviews').select('*');
@@ -1353,9 +1447,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         return;
       }
     } catch { /* не пароль — звичайний пошук */ }
-    // Обычный поиск: закрываем выпадающий список и показываем полную сетку результатов
+    // Звичайний пошук — окрема сторінка /search?q=…: результати можна
+    // надіслати посиланням, «назад» повертає до них, і Гугл бачить сторінку
+    // пошуку, а не головну.
     setIsSearchDropdownOpen(false);
-    if (activeProductId) setActiveProductId(null); // інакше navigate('/') змив би підбір за авто
+    navigate(`/search?q=${encodeURIComponent(query)}`);
     requestAnimationFrame(() => {
       document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -1666,7 +1762,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                         type="button"
                         onClick={() => {
                           setIsSearchDropdownOpen(false);
-                          setActiveProductId(null);
+                          navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
                           requestAnimationFrame(() => {
                             document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                           });

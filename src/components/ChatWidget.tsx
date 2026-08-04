@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, X, Send, Headphones } from 'lucide-react';
-import { supabase } from '../supabaseClient';
 
 // ─── Онлайн-чат з менеджером ────────────────────────────────
 // Повідомлення клієнта йдуть через /api/chat-send у Telegram власника,
-// відповіді з Telegram приходять у Supabase і доставляються сюди Realtime-ом.
+// відповіді з Telegram лягають у Supabase, а віджет забирає їх через
+// /api/chat-history.
+//
+// Чому не Realtime напряму з браузера: підписка працює анонімним ключем,
+// а він лежить відкрито в JS-бандлі. Щоб Realtime доставляв рядки, таблиця
+// chat_messages мусила бути відкрита на читання всім — тобто будь-хто міг
+// вичитати листування всіх клієнтів. Тепер таблиця закрита, а нові
+// повідомлення віджет питає у сервера сам.
 
 interface ChatMessage {
   id: number | string;
@@ -44,51 +50,36 @@ export const ChatWidget = () => {
   const isOpenRef = useRef(isOpen);
   isOpenRef.current = isOpen;
   const listRef = useRef<HTMLDivElement>(null);
-  const historyLoaded = useRef(false);
+  // Найбільший id, який ми вже показали — щоб питати тільки нове
+  const lastIdRef = useRef(0);
 
-  // Історія переписки (один раз при монтуванні)
+  // Історія + нові повідомлення. Відкритий чат опитуємо частіше (людина чекає
+  // відповідь), згорнутий — рідше, він лише малює лічильник непрочитаних.
   useEffect(() => {
-    if (historyLoaded.current) return;
-    historyLoaded.current = true;
-    supabase
-      .from('chat_messages')
-      .select('id, sender, text, created_at')
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
-      .then(({ data }) => {
-        if (data && data.length) {
-          setMessages(data as ChatMessage[]);
-        }
-      });
-  }, [sessionId]);
+    let stopped = false;
 
-  // Realtime: нові повідомлення цієї сесії (відповіді менеджера з Telegram)
-  useEffect(() => {
-    const channel = supabase
-      .channel(`chat-${sessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `session_id=eq.${sessionId}`,
-        },
-        (payload) => {
-          const m = payload.new as ChatMessage;
-          setMessages((prev) =>
-            prev.some((x) => x.id === m.id) ? prev : [...prev, m]
-          );
-          if (m.sender === 'admin' && !isOpenRef.current) {
-            setUnread((u) => u + 1);
-          }
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
+    const poll = async () => {
+      try {
+        const url = `/api/chat-history?session=${sessionId}` +
+          (lastIdRef.current ? `&after=${lastIdRef.current}` : '');
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (stopped || !data.ok || !data.messages?.length) return;
+        const fresh = data.messages as ChatMessage[];
+        lastIdRef.current = Math.max(lastIdRef.current, ...fresh.map((m) => Number(m.id)));
+        setMessages((prev) => {
+          const known = new Set(prev.map((m) => m.id));
+          return [...prev, ...fresh.filter((m) => !known.has(m.id))];
+        });
+        const replies = fresh.filter((m) => m.sender === 'admin').length;
+        if (replies && !isOpenRef.current) setUnread((u) => u + replies);
+      } catch { /* мережа моргнула — спробуємо на наступному колі */ }
     };
-  }, [sessionId]);
+
+    poll();
+    const timer = setInterval(poll, isOpen ? 4000 : 20000);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [sessionId, isOpen]);
 
   // Автопрокрутка вниз
   useEffect(() => {

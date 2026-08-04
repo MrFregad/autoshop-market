@@ -195,6 +195,81 @@ export function categoryPage(shell, cat, sub) {
   });
 }
 
+// ─── Каталог за авто: /catalog/<марка>/<модель>/<категорія> ──
+// Сегменти адреси — «людські» (volkswagen-passat-b5-1997-2005). Для заголовка
+// потрібна справжня назва з довідника, інакше «1997-2005» розпадається на два
+// слова. Марку відбираємо запитом (ilike), модель добираємо звіркою слагів.
+const ANY_SEGMENT = 'usi';
+const toSlug = (s) =>
+  String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
+
+// Запасний варіант, якщо довідник не відповів: перше слово з великої літери
+const unslug = (s) =>
+  String(s ?? '').split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ').trim();
+
+async function fetchCar(markSlug, modelSlug) {
+  if (!markSlug) return { mark: '', model: '' };
+  const like = markSlug.replace(/-/g, '%');
+  const r = await fetch(
+    `${SUPABASE_URL}/rest/v1/car_models?select=mark,model&mark=ilike.${encodeURIComponent(like)}&limit=1000`,
+    { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` } }
+  );
+  if (!r.ok) return { mark: unslug(markSlug), model: unslug(modelSlug) };
+  const rows = await r.json();
+  const mark = rows.find((x) => toSlug(x.mark) === markSlug)?.mark || unslug(markSlug);
+  if (!modelSlug) return { mark, model: '' };
+  const models = rows.filter((x) => x.mark === mark).map((x) => x.model);
+  const model =
+    models.find((m) => toSlug(m) === modelSlug) ||
+    models.find((m) => toSlug(m).includes(modelSlug)) ||
+    unslug(modelSlug);
+  return { mark, model };
+}
+
+// Канонічну адресу збираємо зі слагів, а не з req.url: після rewrite Vercel
+// передає сюди вже /api/meta?…, і canonical вказував би на службовий шлях.
+export function catalogHref(slugs) {
+  const seg = slugs.map((s) => s || '');
+  while (seg.length && !seg[seg.length - 1]) seg.pop();
+  if (!seg.length) return '/catalog';
+  return '/catalog/' + seg.map((s) => s || ANY_SEGMENT).join('/');
+}
+
+export function catalogPage(shell, { mark, model, category, sub, slugs }) {
+  const car = [mark, model].filter(Boolean).join(' ');
+  const what = sub || category || 'Автотовари та тюнінг';
+  const name = car ? `${what} для ${model || mark}` : what;
+  const canonical = `${SITE}${catalogHref(slugs)}`;
+
+  const title = clip(name, 62) + ' | AutoShop Market';
+  const description = clip(
+    `${name} — модельний підбір${car ? ` під ${car}` : ''}. Ціни постачальника, ` +
+      `перевірена сумісність, доставка Новою Поштою по всій Україні, оплата при отриманні.`,
+    300
+  );
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name,
+    url: canonical,
+    description,
+    isPartOf: { '@id': `${SITE}/#website` },
+    ...(car ? { about: { '@type': 'Product', name: car } } : {}),
+  };
+
+  return injectMeta(shell, {
+    title,
+    description,
+    canonical,
+    jsonLd,
+    body: wrap(
+      `<h1 style="font-size:26px;line-height:1.25;margin:0 0 12px">${esc(name)}</h1>` +
+        `<p style="margin:0;color:#4b5563">${esc(description)}</p>`
+    ),
+  });
+}
+
 // Оболонка однакова для всього деплою — тягнемо раз на інстанс
 let shellCache = null;
 async function getShell(host) {
@@ -206,7 +281,7 @@ async function getShell(host) {
 }
 
 export default async function handler(req, res) {
-  const { type, id, cat, sub } = req.query ?? {};
+  const { type, id, cat, sub, mark, model } = req.query ?? {};
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   let shell;
@@ -224,6 +299,21 @@ export default async function handler(req, res) {
       if (!p) return res.status(404).send(shell);
       res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
       return res.status(200).send(productPage(shell, p));
+    }
+    if (type === 'catalog') {
+      const seg = (v) => (v && v !== ANY_SEGMENT ? decodeURIComponent(v) : '');
+      const slugs = [seg(mark), seg(model), seg(cat), seg(sub)];
+      const car = await fetchCar(slugs[0], slugs[1]);
+      res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
+      return res.status(200).send(
+        catalogPage(shell, {
+          mark: car.mark,
+          model: car.model,
+          category: unslug(slugs[2]),
+          sub: unslug(slugs[3]),
+          slugs,
+        })
+      );
     }
     res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
     return res.status(200).send(categoryPage(shell, decodeURIComponent(cat ?? ''), sub && decodeURIComponent(sub)));
@@ -288,6 +378,28 @@ async function demo() {
   const catHtml = categoryPage(shell, "Інтер'єр", null);
   assert.match(catHtml, /<link rel="canonical" href="[^"]*\/category\/%D0%86/);
   assert.match(catHtml, /"@type":"CollectionPage"/);
+
+  // ── каталог за авто ──
+  // canonical мусить вести на сторінку каталогу, а не на /api/meta
+  const cars = catalogPage(shell, {
+    mark: 'Volkswagen', model: 'Volkswagen Passat B5 1997-2005', category: 'Килимки', sub: '',
+    slugs: ['volkswagen', 'volkswagen-passat-b5-1997-2005', 'kylymky'],
+  });
+  assert.match(
+    cars,
+    /<link rel="canonical" href="https:\/\/autoshopmarket\.com\.ua\/catalog\/volkswagen\/volkswagen-passat-b5-1997-2005\/kylymky" \/>/
+  );
+  assert.match(cars, /<title>Килимки для Volkswagen Passat B5 1997-2005/);
+  assert.ok(/<title>([\s\S]*?)<\/title>/.exec(cars)[1].length <= 90, 'title задовгий');
+  assert.match(cars, /<h1[^>]*>Килимки для Volkswagen Passat B5 1997-2005<\/h1>/);
+
+  // пропущений сегмент не має з'їдати позицію наступного
+  assert.equal(catalogHref(['volkswagen', '', 'kylymky']), '/catalog/volkswagen/usi/kylymky');
+  assert.equal(catalogHref(['volkswagen', 'golf-7', '']), '/catalog/volkswagen/golf-7');
+  assert.equal(catalogHref(['', '', '']), '/catalog');
+
+  // роки в назві покоління не мають розпадатись на два слова
+  assert.equal(unslug('passat-b5'), 'Passat B5');
 
   console.log('ok');
 }

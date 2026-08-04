@@ -11,6 +11,10 @@
     { "source": "/product/:id(\\d+)", "destination": "/api/meta?type=product&id=:id" },
     { "source": "/category/:cat", "destination": "/api/meta?type=category&cat=:cat" },
     { "source": "/category/:cat/:sub", "destination": "/api/meta?type=category&cat=:cat&sub=:sub" },
+    { "source": "/catalog/:mark", "destination": "/api/meta?type=catalog&mark=:mark" },
+    { "source": "/catalog/:mark/:model", "destination": "/api/meta?type=catalog&mark=:mark&model=:model" },
+    { "source": "/catalog/:mark/:model/:cat", "destination": "/api/meta?type=catalog&mark=:mark&model=:model&cat=:cat" },
+    { "source": "/catalog/:mark/:model/:cat/:sub", "destination": "/api/meta?type=catalog&mark=:mark&model=:model&cat=:cat&sub=:sub" },
     {
       "source": "/((?!api/|sitemap[^/]*\\.xml|facebook-catalog\\.xml|robots\\.txt).*)",
       "destination": "/index.html"

@@ -48,11 +48,61 @@ const products = rows.filter((r) => !isPlaceholder(r.name));
 // (коса риска в назві міняється на дефіс, як у App.tsx)
 const categories = [...new Set(products.map((p) => p.category).filter(Boolean))].sort();
 
+// ─── Сторінки підбору за авто: /catalog/<марка>/<модель>/<категорія> ───
+// Головні цільові сторінки магазину: люди шукають не «килимки», а «килимки
+// на Passat B5». Раніше підбір жив у query на корені (/?mark=…), тобто для
+// Google це була та сама головна — жодна підбірка в індекс не потрапляла.
+const toSlug = (s) =>
+  String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
+
+// Кирилиця в шляху (назви категорій) — у карті сайту заявляємо її
+// у percent-кодуванні, як того вимагає стандарт sitemap
+const catalogLoc = (parts) => '/catalog/' + parts.map(encodeURIComponent).join('/');
+
+const cars = [];
+for (let start = 0; ; start += BATCH) {
+  const { data, error } = await supabase
+    .from('car_models')
+    .select('mark,model,categories')
+    .order('mark')
+    .order('model')
+    .range(start, start + BATCH - 1);
+  if (error) { console.error('car_models error:', error.message); break; }
+  if (!data || data.length === 0) break;
+  cars.push(...data);
+  if (data.length < BATCH) break;
+}
+
+// Занадто дрібні підбірки (1-2 товари) в карту не заявляємо: сторінка майже
+// порожня, а краулінговий бюджет витрачається.
+const MIN_ITEMS = 3;
+const carUrls = [];
+const seenMarks = new Set();
+for (const row of cars) {
+  const markSlug = toSlug(row.mark);
+  const modelSlug = toSlug(row.model);
+  if (!markSlug) continue;
+  if (!seenMarks.has(markSlug)) {
+    seenMarks.add(markSlug);
+    carUrls.push([catalogLoc([markSlug]), '0.8']);
+  }
+  if (!modelSlug) continue;
+  carUrls.push([catalogLoc([markSlug, modelSlug]), '0.8']);
+  for (const [cat, subs] of Object.entries(row.categories || {})) {
+    const total = Object.values(subs).reduce((a, b) => a + b, 0);
+    if (total >= MIN_ITEMS) carUrls.push([catalogLoc([markSlug, modelSlug, toSlug(cat)]), '0.7']);
+  }
+}
+
 const urls = [
   `  <url>\n    <loc>${SITE}/</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>`,
   ...categories.map(
     (c) =>
       `  <url>\n    <loc>${SITE}/category/${encodeURIComponent(c.replace(/\//g, '-'))}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n  </url>`
+  ),
+  ...carUrls.map(
+    ([path, priority]) =>
+      `  <url>\n    <loc>${SITE}${path}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${priority}</priority>\n  </url>`
   ),
   ...products.map(
     (p) =>
@@ -85,6 +135,7 @@ const index =
 writeFileSync(resolve(PUBLIC_DIR, 'sitemap.xml'), index, 'utf8');
 
 console.log(
-  `Готово: ${products.length} товарів у наявності + ${categories.length} категорій + головна, ` +
+  `Готово: ${products.length} товарів у наявності + ${categories.length} категорій + ` +
+    `${carUrls.length} сторінок підбору за авто + головна, ` +
     `${chunks.length} файлів (sitemap-1..${chunks.length}.xml) → ${PUBLIC_DIR}`
 );
