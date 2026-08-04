@@ -87,10 +87,16 @@ for (const row of cars) {
     carUrls.push([catalogLoc([markSlug]), '0.8']);
   }
   if (!modelSlug) continue;
-  carUrls.push([catalogLoc([markSlug, modelSlug]), '0.8']);
+  // Рядок «модель = марка» (Acura/Acura) — це кошик універсальних товарів
+  // бренду, тобто те саме, що /catalog/<марка>. Окрему адресу моделі не
+  // заявляємо, а її категорії йдуть під заглушкою — рівно та адреса, яку
+  // сторінка вказує в canonical.
+  const brandWide = modelSlug === markSlug;
+  if (!brandWide) carUrls.push([catalogLoc([markSlug, modelSlug]), '0.8']);
+  const modelSeg = brandWide ? 'usi' : modelSlug;
   for (const [cat, subs] of Object.entries(row.categories || {})) {
     const total = Object.values(subs).reduce((a, b) => a + b, 0);
-    if (total >= MIN_ITEMS) carUrls.push([catalogLoc([markSlug, modelSlug, toSlug(cat)]), '0.7']);
+    if (total >= MIN_ITEMS) carUrls.push([catalogLoc([markSlug, modelSeg, toSlug(cat)]), '0.7']);
   }
 }
 

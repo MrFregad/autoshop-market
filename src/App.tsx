@@ -782,6 +782,10 @@ const catalogPath = (parts: (string | null | undefined)[]) => {
 const subFromSlug = (category: string, slug: string) =>
   (catalogTree[category] || []).find((s) => toSlug(s) === toSlug(slug)) ?? slug;
 
+// Значення за замовчуванням для <title> — те саме, що лежить в index.html
+const SITE_URL = 'https://autoshopmarket.com.ua';
+const SITE_TITLE = 'Килимки, дефлектори, пороги, обвіси для авто - AutoShop Market';
+
 // Найбільші категорії каталогу — клік веде у каталог з фільтром
 const heroCategories = [
   { icon: <Wind className="h-6 w-6" />, name: 'Дефлектори' },
@@ -1515,6 +1519,48 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       || (directProduct?.id === activeProductId ? directProduct : null),
     [activeProductId, products, directProduct]
   );
+  // ─── Заголовок і canonical при переходах усередині сайту ──
+  // /api/meta ставить їх правильно при повному завантаженні сторінки, але далі
+  // сайт міняє сторінки без перезавантаження — і в шапці лишався заголовок
+  // тієї сторінки, з якої почали. Для Google це не критично (він відкриває
+  // кожну адресу окремо), а от посилання, скопійоване з адресного рядка й
+  // надіслане в месенджер, підтягувало чужу назву.
+  //
+  // Адресу збираємо з розпізнаних назв, а не з location.pathname: інакше
+  // коротка адреса /catalog/volkswagen/passat-b5 переписала б canonical,
+  // який сервер уже виставив на повний слаг, і дублікат повернувся б.
+  useEffect(() => {
+    const pageSuffix = currentPage > 1 ? `?page=${currentPage}` : '';
+    const what = selectedSubcategory || (selectedCategory !== 'Усі' ? selectedCategory : '');
+    let title = SITE_TITLE;
+    let href = `${SITE_URL}/`;
+
+    if (currentProduct) {
+      title = `${currentProduct.name} | AutoShop Market`;
+      href = `${SITE_URL}/product/${currentProduct.id}`;
+    } else if (isSearching) {
+      title = `Пошук: ${searchQuery.trim()} | AutoShop Market`;
+      href = `${SITE_URL}/search?q=${encodeURIComponent(searchQuery.trim())}`;
+    } else if (carMark) {
+      const car = carModel || carMark;
+      title = `${what || 'Автотовари та тюнінг'} для ${car} | AutoShop Market`;
+      // Модель, що дорівнює марці, — це та сама марка
+      const model = toSlug(carModel) === toSlug(carMark) ? '' : carModel;
+      href = SITE_URL + catalogPath([carMark, model, what && selectedCategory, selectedSubcategory]) + pageSuffix;
+    } else if (what) {
+      title = `${what} — купити в Україні | AutoShop Market`;
+      href = `${SITE_URL}/category/${categorySlug(selectedCategory)}` +
+        (selectedSubcategory ? `/${encodeURIComponent(selectedSubcategory)}` : '') + pageSuffix;
+    } else if (isCatalogPath) {
+      title = `Каталог автотоварів | AutoShop Market`;
+      href = `${SITE_URL}/catalog${pageSuffix}`;
+    }
+
+    document.title = title;
+    document.querySelector('link[rel="canonical"]')?.setAttribute('href', href);
+  }, [currentProduct, isSearching, searchQuery, carMark, carModel, selectedCategory,
+      selectedSubcategory, isCatalogPath, currentPage]);
+
   const currentProductReviews = useMemo(() => reviews.filter(r => r.product_id === activeProductId), [reviews, activeProductId]);
   // Рейтинг рахуємо з реальних відгуків. Немає відгуків — немає й зірок.
   const currentRating = currentProductReviews.length

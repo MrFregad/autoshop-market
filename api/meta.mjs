@@ -203,27 +203,63 @@ const ANY_SEGMENT = 'usi';
 const toSlug = (s) =>
   String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '');
 
-// Запасний варіант, якщо довідник не відповів: перше слово з великої літери
-const unslug = (s) =>
-  String(s ?? '').split('-').map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(' ').trim();
+const sbGet = async (path) => {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
+  });
+  if (!r.ok) throw new Error(`supabase ${r.status}`);
+  return r.json();
+};
 
-async function fetchCar(markSlug, modelSlug) {
-  if (!markSlug) return { mark: '', model: '' };
-  const like = markSlug.replace(/-/g, '%');
-  const r = await fetch(
-    `${SUPABASE_URL}/rest/v1/car_models?select=mark,model&mark=ilike.${encodeURIComponent(like)}&limit=1000`,
-    { headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` } }
+/**
+ * Зіставляє сегменти адреси з довідником авто.
+ * null — такої марки/моделі/категорії немає, сторінку віддаємо як 404.
+ *
+ * Навіщо сувора перевірка: раніше будь-який рядок у шляху ставав сторінкою
+ * («/catalog/volkswagen/neisnuyucha-model-999» → 200 з index,follow). Це
+ * фабрика дублікатів — нескінченна кількість адрес з майже однаковим текстом,
+ * за що Google знижує довіру до всього домену.
+ */
+export async function resolveCatalog([markSlug, modelSlug, catSlug, subSlug]) {
+  if (!markSlug) return { mark: '', model: '', category: '', sub: '' };
+
+  const rows = await sbGet(
+    `car_models?select=mark,model&mark=ilike.${encodeURIComponent(markSlug.replace(/-/g, '%'))}&limit=1000`
   );
-  if (!r.ok) return { mark: unslug(markSlug), model: unslug(modelSlug) };
-  const rows = await r.json();
-  const mark = rows.find((x) => toSlug(x.mark) === markSlug)?.mark || unslug(markSlug);
-  if (!modelSlug) return { mark, model: '' };
-  const models = rows.filter((x) => x.mark === mark).map((x) => x.model);
-  const model =
-    models.find((m) => toSlug(m) === modelSlug) ||
-    models.find((m) => toSlug(m).includes(modelSlug)) ||
-    unslug(modelSlug);
-  return { mark, model };
+  const mark = rows.find((x) => toSlug(x.mark) === markSlug)?.mark;
+  if (!mark) return null;
+
+  let model = '';
+  if (modelSlug) {
+    const models = rows.filter((x) => x.mark === mark).map((x) => x.model);
+    model =
+      models.find((m) => toSlug(m) === modelSlug) ||
+      models.find((m) => toSlug(m).includes(modelSlug)) ||
+      '';
+    if (!model) return null;
+  }
+
+  let category = '';
+  let sub = '';
+  if (catSlug) {
+    // Які категорії взагалі є в цього авто — знає той самий довідник
+    const q = `mark=eq.${encodeURIComponent(mark)}` + (model ? `&model=eq.${encodeURIComponent(model)}` : '');
+    const merged = {};
+    for (const row of await sbGet(`car_models?select=categories&${q}&limit=500`)) {
+      for (const [c, subs] of Object.entries(row.categories || {})) {
+        merged[c] ??= new Set();
+        for (const s of Object.keys(subs)) merged[c].add(s);
+      }
+    }
+    category = Object.keys(merged).find((c) => toSlug(c) === catSlug) || '';
+    if (!category) return null;
+    if (subSlug) {
+      sub = [...merged[category]].find((s) => toSlug(s) === subSlug) || '';
+      if (!sub) return null;
+    }
+  }
+
+  return { mark, model, category, sub };
 }
 
 // Канонічну адресу збираємо зі слагів, а не з req.url: після rewrite Vercel
@@ -235,11 +271,18 @@ export function catalogHref(slugs) {
   return '/catalog/' + seg.map((s) => s || ANY_SEGMENT).join('/');
 }
 
-export function catalogPage(shell, { mark, model, category, sub, slugs }) {
+export function catalogPage(shell, { mark, model, category, sub }) {
   const car = [mark, model].filter(Boolean).join(' ');
   const what = sub || category || 'Автотовари та тюнінг';
   const name = car ? `${what} для ${model || mark}` : what;
-  const canonical = `${SITE}${catalogHref(slugs)}`;
+
+  // Canonical збираємо зі справжніх назв, а не з того, що написано в адресі:
+  // /catalog/volkswagen/passat-b5 і повний слаг — це одна сторінка, і кожна
+  // мусить вказувати на повний варіант, інакше Google бачить два дублікати.
+  // Модель, що дорівнює марці («/catalog/acura/acura») — теж сама марка.
+  const modelSlug = !model || toSlug(model) === toSlug(mark) ? '' : toSlug(model);
+  const canonical =
+    SITE + catalogHref([toSlug(mark), modelSlug, toSlug(category), toSlug(sub)]);
 
   const title = clip(name, 62) + ' | AutoShop Market';
   const description = clip(
@@ -302,18 +345,12 @@ export default async function handler(req, res) {
     }
     if (type === 'catalog') {
       const seg = (v) => (v && v !== ANY_SEGMENT ? decodeURIComponent(v) : '');
-      const slugs = [seg(mark), seg(model), seg(cat), seg(sub)];
-      const car = await fetchCar(slugs[0], slugs[1]);
+      const found = await resolveCatalog([seg(mark), seg(model), seg(cat), seg(sub)]);
+      // Такого авто (чи категорії в нього) немає — чесний 404, інакше під будь-який
+      // набір літер у шляху народжувалась би нова сторінка для індексу
+      if (!found) return res.status(404).send(shell);
       res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-      return res.status(200).send(
-        catalogPage(shell, {
-          mark: car.mark,
-          model: car.model,
-          category: unslug(slugs[2]),
-          sub: unslug(slugs[3]),
-          slugs,
-        })
-      );
+      return res.status(200).send(catalogPage(shell, found));
     }
     res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
     return res.status(200).send(categoryPage(shell, decodeURIComponent(cat ?? ''), sub && decodeURIComponent(sub)));
@@ -380,26 +417,46 @@ async function demo() {
   assert.match(catHtml, /"@type":"CollectionPage"/);
 
   // ── каталог за авто ──
-  // canonical мусить вести на сторінку каталогу, а не на /api/meta
-  const cars = catalogPage(shell, {
-    mark: 'Volkswagen', model: 'Volkswagen Passat B5 1997-2005', category: 'Килимки', sub: '',
-    slugs: ['volkswagen', 'volkswagen-passat-b5-1997-2005', 'kylymky'],
-  });
-  assert.match(
-    cars,
-    /<link rel="canonical" href="https:\/\/autoshopmarket\.com\.ua\/catalog\/volkswagen\/volkswagen-passat-b5-1997-2005\/kylymky" \/>/
-  );
+  const vw = { mark: 'Volkswagen', model: 'Volkswagen Passat B5 1997-2005', category: 'Килимки', sub: '' };
+  const cars = catalogPage(shell, vw);
   assert.match(cars, /<title>Килимки для Volkswagen Passat B5 1997-2005/);
   assert.ok(/<title>([\s\S]*?)<\/title>/.exec(cars)[1].length <= 90, 'title задовгий');
   assert.match(cars, /<h1[^>]*>Килимки для Volkswagen Passat B5 1997-2005<\/h1>/);
+
+  // canonical будується з назв, а не з адреси: коротка адреса
+  // /catalog/volkswagen/passat-b5 мусить вказувати на повний слаг,
+  // інакше в індексі два дублікати однієї сторінки
+  const canonicalOf = (html) => /<link rel="canonical" href="([^"]*)"/.exec(html)[1];
+  assert.equal(
+    canonicalOf(cars),
+    'https://autoshopmarket.com.ua/catalog/volkswagen/volkswagen-passat-b5-1997-2005/килимки'
+  );
+
+  // модель, що дорівнює марці (/catalog/acura/acura) — це та сама марка
+  assert.equal(
+    canonicalOf(catalogPage(shell, { mark: 'Acura', model: 'Acura', category: '', sub: '' })),
+    'https://autoshopmarket.com.ua/catalog/acura'
+  );
 
   // пропущений сегмент не має з'їдати позицію наступного
   assert.equal(catalogHref(['volkswagen', '', 'kylymky']), '/catalog/volkswagen/usi/kylymky');
   assert.equal(catalogHref(['volkswagen', 'golf-7', '']), '/catalog/volkswagen/golf-7');
   assert.equal(catalogHref(['', '', '']), '/catalog');
 
-  // роки в назві покоління не мають розпадатись на два слова
-  assert.equal(unslug('passat-b5'), 'Passat B5');
+  // ── неіснуючі сегменти → null (обробник віддасть 404) ──
+  assert.equal(await resolveCatalog(['neisnuyucha-marka-999']), null, 'вигадана марка стала сторінкою');
+  assert.equal(
+    await resolveCatalog(['volkswagen', 'neisnuyucha-model-999']), null,
+    'вигадана модель стала сторінкою'
+  );
+  assert.equal(
+    await resolveCatalog(['volkswagen', 'volkswagen-passat-b5-1997-2005', 'neisnuyucha-kategoriya']), null,
+    'вигадана категорія стала сторінкою'
+  );
+  // а справжні — резолвяться, і коротка форма теж
+  assert.deepEqual(await resolveCatalog(['volkswagen', 'passat-b5']), {
+    mark: 'Volkswagen', model: 'Volkswagen Passat B5 1997-2005', category: '', sub: '',
+  });
 
   console.log('ok');
 }
