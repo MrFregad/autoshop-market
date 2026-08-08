@@ -71,8 +71,9 @@ export function injectMeta(shell, { title, description, canonical, image, jsonLd
   }
 
   // В оболонці #root не порожній (там статичні посилання на категорії для
-  // краулера), тому міняємо весь блок, а не порожній тег
-  if (body) html = html.replace(/<div id="root">[\s\S]*?<\/div>\s*(?=<script)/, `<div id="root">${body}</div>\n    `);
+  // краулера), тому міняємо весь блок, а не порожній тег. Усередині блоку
+  // немає вкладених <div>, тож лінива крапка доходить рівно до його кінця.
+  if (body) html = html.replace(/<div id="root">[\s\S]*?<\/div>/, `<div id="root">${body}</div>`);
 
   return html;
 }
@@ -451,6 +452,18 @@ async function demo() {
   // екранування працює і всередині стилізованої обгортки
   assert.match(html, /<h1[^>]*>Дефлектор &quot;Х&quot; &amp; &lt;тест&gt;<\/h1>/);
   assert.match(html, /<div id="root"><div style="font:16px/);
+
+  // Прод-оболонка не така, як вихідна: vite переносить <script> у <head>.
+  // Перша версія заміни спиралась на «</div> перед <script>» і на живому
+  // сайті мовчки не спрацьовувала — сторінки лишались зі статичним меню.
+  const prodShell = shell
+    .replace('<script type="module" src="/src/main.tsx"></script>', '')
+    .replace('</head>', '  <script type="module" crossorigin src="/assets/index-abc.js"></script>\n  </head>');
+  assert.match(
+    productPage(prodShell, base),
+    /<div id="root"><div style="font:16px/,
+    'у зібраній оболонці тіло не підставилось'
+  );
 
   // рядки опису лишаються рядками у видимому блоці, але не в <meta>
   const multi = productPage(shell, { ...base, description: 'Матеріал: Гума\nВстановлення: В штатні місця' });
