@@ -1601,6 +1601,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   };
 
   const handleEditClick = (e: React.MouseEvent, product: Product) => {
+    e.preventDefault(); // картка — <a>, інакше клік по олівцю відкриє товар
     e.stopPropagation();
     setEditingProduct(product);
     setFormName(product.name);
@@ -1617,6 +1618,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   };
 
   const handleDeleteProduct = async (e: React.MouseEvent, id: number) => {
+    e.preventDefault(); // те саме: не давати картці-посиланню відкрити товар
     e.stopPropagation();
     if (window.confirm('Видалити цей товар назавжди?')) {
       const resp = await fetch('/api/admin', {
@@ -2063,8 +2065,17 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               <motion.div layout className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
                 <AnimatePresence>
                   {paginatedProducts.map((product, i) => (
-                    <motion.div
+                    // Картка — справжнє посилання: інакше на товар не веде жоден
+                    // <a>, і для Google усі 58 тис. карток — сироти з sitemap.
+                    // Заодно працює «відкрити в новій вкладці».
+                    <motion.a
                       key={product.id}
+                      href={`/product/${product.id}`}
+                      onClick={(e) => {
+                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                        e.preventDefault();
+                        setActiveProductId(product.id);
+                      }}
                       custom={i}
                       initial="hidden"
                       animate="visible"
@@ -2072,8 +2083,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                       variants={fadeInUp}
                       layout
                       whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                      onClick={() => setActiveProductId(product.id)}
-                      className="bg-white border rounded-2xl p-3 flex flex-col justify-between relative cursor-pointer hover:shadow-xl transition-shadow group"
+                      className="bg-white border rounded-2xl p-3 flex flex-col justify-between relative cursor-pointer hover:shadow-xl transition-shadow group no-underline text-inherit"
                     >
                       {isAdminMode && (
                         <div className="absolute left-2 top-2 z-20 flex gap-1">
@@ -2110,14 +2120,16 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                           <span className="text-sm font-black text-slate-900">{product.price} ₴</span>
                           <motion.button
                             whileTap={{ scale: 0.95 }}
-                            onClick={(e) => { e.stopPropagation(); addToCart(product); }}
+                            // Картка тепер <a> — саме лише stopPropagation не спиняє
+                            // перехід за посиланням, потрібен preventDefault
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); addToCart(product); }}
                             className="mt-2 w-full bg-purple-600 text-white py-2 rounded-lg text-[11px] font-bold hover:bg-purple-700 transition flex items-center justify-center gap-1 min-h-[36px]"
                           >
                             <ShoppingCart className="w-3 h-3" /> Купити
                           </motion.button>
                         </div>
                       </div>
-                    </motion.div>
+                    </motion.a>
                   ))}
                 </AnimatePresence>
               </motion.div>

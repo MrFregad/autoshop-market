@@ -70,7 +70,9 @@ export function injectMeta(shell, { title, description, canonical, image, jsonLd
     html = html.replace('</head>', `  <script type="application/ld+json">${safe}</script>\n  </head>`);
   }
 
-  if (body) html = html.replace('<div id="root"></div>', `<div id="root">${body}</div>`);
+  // В оболонці #root не порожній (там статичні посилання на категорії для
+  // краулера), тому міняємо весь блок, а не порожній тег
+  if (body) html = html.replace(/<div id="root">[\s\S]*?<\/div>\s*(?=<script)/, `<div id="root">${body}</div>\n    `);
 
   return html;
 }
@@ -91,6 +93,40 @@ const carFit = (p) => {
   const list = Array.isArray(p.models) ? p.models.filter(Boolean) : [];
   return { first: list[0] || String(p.compatibility ?? '').split(',')[0].trim(), all: list.join(', ') || String(p.compatibility ?? '') };
 };
+
+// ─── Список товарів на хаб-сторінці ─────────────────────────
+// Без нього категорія — це h1 і абзац, тобто тупик: на сайті немає жодного
+// посилання на картку товару, і всі 58 тис. адрес існують лише в sitemap.
+// Саме так виглядає «Обнаружена, не проиндексирована» в Search Console —
+// Google знає адресу, але не бачить, звідки на неї ходять.
+const HUB_LIMIT = 48;
+
+const productLinks = (items) =>
+  items.length
+    ? '<ul style="list-style:none;padding:0;margin:16px 0 0;display:grid;gap:10px">' +
+      items
+        .map(
+          (p) =>
+            `<li><a href="/product/${encodeURIComponent(p.id)}" style="color:#6d28d9;text-decoration:none">${esc(p.name)}</a>` +
+            ` — <span style="white-space:nowrap">${esc(p.price)} грн</span></li>`
+        )
+        .join('') +
+      '</ul>'
+    : '';
+
+// Помилка тут не повинна ламати сторінку — просто лишиться без списку
+async function hubProducts(filter) {
+  try {
+    return await sbGet(
+      `products?select=id,name,price&${filter}&available=not.is.false&order=id.desc&limit=${HUB_LIMIT}`
+    );
+  } catch {
+    return [];
+  }
+}
+
+// PostgREST: елемент масиву з пробілами/комами треба брати в лапки
+const arrayContains = (col, value) => `${col}=cs.${encodeURIComponent(`{"${value}"}`)}`;
 
 async function fetchProduct(id) {
   const fields =
@@ -168,7 +204,7 @@ export function productPage(shell, p) {
   return injectMeta(shell, { title, description, canonical, image, jsonLd, body });
 }
 
-export function categoryPage(shell, cat, sub) {
+export function categoryPage(shell, cat, sub, items = []) {
   const name = sub || cat;
   const canonical = `${SITE}/category/${encodeURIComponent(cat)}${sub ? `/${encodeURIComponent(sub)}` : ''}`;
   const title = `${name} — купити в Україні | AutoShop Market`;
@@ -190,7 +226,8 @@ export function categoryPage(shell, cat, sub) {
     jsonLd,
     body: wrap(
       `<h1 style="font-size:26px;line-height:1.25;margin:0 0 12px">${esc(name)}</h1>` +
-        `<p style="margin:0;color:#4b5563">${esc(description)}</p>`
+        `<p style="margin:0;color:#4b5563">${esc(description)}</p>` +
+        productLinks(items)
     ),
   });
 }
@@ -271,7 +308,7 @@ export function catalogHref(slugs) {
   return '/catalog/' + seg.map((s) => s || ANY_SEGMENT).join('/');
 }
 
-export function catalogPage(shell, { mark, model, category, sub }) {
+export function catalogPage(shell, { mark, model, category, sub }, items = []) {
   const car = [mark, model].filter(Boolean).join(' ');
   const what = sub || category || 'Автотовари та тюнінг';
   const name = car ? `${what} для ${model || mark}` : what;
@@ -308,7 +345,8 @@ export function catalogPage(shell, { mark, model, category, sub }) {
     jsonLd,
     body: wrap(
       `<h1 style="font-size:26px;line-height:1.25;margin:0 0 12px">${esc(name)}</h1>` +
-        `<p style="margin:0;color:#4b5563">${esc(description)}</p>`
+        `<p style="margin:0;color:#4b5563">${esc(description)}</p>` +
+        productLinks(items)
     ),
   });
 }
@@ -349,11 +387,25 @@ export default async function handler(req, res) {
       // Такого авто (чи категорії в нього) немає — чесний 404, інакше під будь-який
       // набір літер у шляху народжувалась би нова сторінка для індексу
       if (!found) return res.status(404).send(shell);
+      const filter = [
+        found.model ? arrayContains('models', found.model) : arrayContains('marks', found.mark),
+        found.category && `category=eq.${encodeURIComponent(found.category)}`,
+        found.sub && `subcategory=eq.${encodeURIComponent(found.sub)}`,
+      ].filter(Boolean).join('&');
       res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-      return res.status(200).send(catalogPage(shell, found));
+      return res.status(200).send(catalogPage(shell, found, await hubProducts(filter)));
     }
+    const catName = decodeURIComponent(cat ?? '');
+    const subName = sub && decodeURIComponent(sub);
+    // В адресі коса риска категорії замінена дефісом (categorySlug в App.tsx):
+    // «Багажники-Дуги на дах» у БД зветься «Багажники/Дуги на дах».
+    // Жодна категорія верхнього рівня дефіса в назві не має, тож заміна безпечна.
+    const catFilter = [
+      `category=eq.${encodeURIComponent(catName.replace(/-/g, '/'))}`,
+      subName && `subcategory=eq.${encodeURIComponent(subName)}`,
+    ].filter(Boolean).join('&');
     res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-    return res.status(200).send(categoryPage(shell, decodeURIComponent(cat ?? ''), sub && decodeURIComponent(sub)));
+    return res.status(200).send(categoryPage(shell, catName, subName, await hubProducts(catFilter)));
   } catch (err) {
     // сторінка не повинна падати через Supabase — віддаємо звичайну оболонку
     console.error('meta:', err.message);
@@ -412,9 +464,23 @@ async function demo() {
   assert.ok(!outHtml.includes('schema.org/InStock'), 'InStock лишився для недоступного товару');
   assert.match(outHtml, /Немає в наявності/);
 
-  const catHtml = categoryPage(shell, "Інтер'єр", null);
+  const catHtml = categoryPage(shell, "Інтер'єр", null, [
+    { id: 42, name: 'Килимок EVA "тест"', price: 990 },
+  ]);
   assert.match(catHtml, /<link rel="canonical" href="[^"]*\/category\/%D0%86/);
   assert.match(catHtml, /"@type":"CollectionPage"/);
+
+  // Хаб без посилань на товари = сторінка-тупик: саме через це 58 тис. карток
+  // висіли в Search Console як «обнаружена, не проиндексирована»
+  assert.match(catHtml, /<a href="\/product\/42"[^>]*>Килимок EVA &quot;тест&quot;<\/a>/);
+  assert.match(catHtml, /990 грн/);
+  assert.ok(!/aria-label="Категорії каталогу"/.test(catHtml), 'статична навігація оболонки лишилась у тілі');
+  const catalogWithItems = catalogPage(
+    shell,
+    { mark: 'Skoda', model: '', category: 'Килимки', sub: '' },
+    [{ id: 7, name: 'Килимок Skoda', price: 1 }]
+  );
+  assert.match(catalogWithItems, /<a href="\/product\/7"/);
 
   // ── каталог за авто ──
   const vw = { mark: 'Volkswagen', model: 'Volkswagen Passat B5 1997-2005', category: 'Килимки', sub: '' };
