@@ -47,6 +47,14 @@ interface Product {
   short_title?: string | null;   // короткое название варианта
 }
 
+// Поля, потрібні картці товару в сітці. Решта (description, compatibility,
+// marks/models — до 18 000 символів на рядок) вантажиться лише при відкритті
+// товару: на сторінку каталогу це 9 КБ замість 23 КБ.
+const PRODUCT_CARD_FIELDS = 'id,name,price,old_price,images,category,available';
+
+// totalCount === -1 — точну кількість порахувати не вдалось (див. fetchProducts)
+const COUNT_UNKNOWN = -1;
+
 interface CartItem extends Product { quantity: number; }
 
 interface Review {
@@ -225,6 +233,22 @@ const ProductBadge = ({ type }: { type?: string }) => {
 // ─── Акції та новинки (тільки на головній) ──────────────────
 // Горизонтальний ряд карток. Верстка спрощена відносно сітки каталогу:
 // без адмін-кнопок і анімацій появи — це вітрина, а не робочий список.
+// Скелетони замість напису «Завантаження товарів…»: сітка одразу має ту саму
+// форму, що й реальні картки, тож сторінка не стрибає, коли товари приходять.
+const ProductGridSkeleton = ({ count = 18 }: { count?: number }) => (
+  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6" aria-hidden="true">
+    {Array.from({ length: count }, (_, i) => (
+      <div key={i} className="bg-white border rounded-2xl p-3 flex flex-col">
+        <div className="aspect-square w-full rounded-xl bg-slate-200 animate-pulse" />
+        <div className="mt-2 h-3 w-full rounded bg-slate-200 animate-pulse" />
+        <div className="mt-1.5 h-3 w-2/3 rounded bg-slate-200 animate-pulse" />
+        <div className="mt-2 h-4 w-1/3 rounded bg-slate-200 animate-pulse" />
+        <div className="mt-2 h-9 w-full rounded-lg bg-slate-200 animate-pulse" />
+      </div>
+    ))}
+  </div>
+);
+
 const ShowcaseRow = ({ title, icon, items, onOpen, onAdd }: {
   title: string;
   icon: React.ReactNode;
@@ -1296,11 +1320,19 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
   // Серверная пагинация: грузим только текущую страницу выбранного фильтра.
   // Каталог большой (десятки тысяч товаров) — грузить всё в браузер нельзя.
+  //
+  // Товари й лічильник ідуть ДВОМА паралельними запитами. Раніше це був один
+  // запит з count: 'exact', і саме лічильник усе гальмував: точний підрахунок
+  // сканує весь збіг (29 000 килимків) і на пошуку падав по statement timeout
+  // за 3,5 с, після чого код повторював запит ще раз. Товари при цьому були
+  // готові за 400 мс — покупець просто чекав на цифру в хлібних крихтах.
+  // Тепер картки малюються одразу, а число підтягується, коли порахується.
   const fetchProducts = async () => {
     setIsLoading(true);
     const start = (currentPage - 1) * PRODUCTS_PER_PAGE;
-    const buildQuery = (withAvailability: boolean, withCount = true) => {
-      let query = supabase.from('products').select('*', withCount ? { count: 'exact' } : undefined);
+
+    const build = (select: string, opts?: { count: 'exact' }) => {
+      let query = supabase.from('products').select(select, opts);
       if (isSearching) {
         // Пошук російською → знаходить товари з українськими назвами.
         // Для кожного слова запиту шукаємо оригінал + укр. переклад
@@ -1320,30 +1352,36 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       if (carModel) query = query.contains('models', [carModel]);
       else if (carMark) query = query.contains('marks', [carMark]);
       // Товары без наличия у поставщика скрываем от покупателей (админ видит всё)
-      if (withAvailability && !isAdminMode) query = query.not('available', 'is', false);
-      return query
-        .order('id', { ascending: false })
-        .range(start, start + PRODUCTS_PER_PAGE - 1);
+      if (!isAdminMode) query = query.not('available', 'is', false);
+      return query;
     };
-    let { data, count, error } = await buildQuery(true);
-    // Точний count сканує всю вибірку і на «холодній» базі падає з statement
-    // timeout (57014) — каталог показував «товарів не знайдено» на живих
-    // категоріях. Пробуємо без count (пагінація зникне, товари будуть).
-    // Це найчастіша причина збою, тому йде першою: раніше вона стояла
-    // третьою, і покупець дивився на спінер три таймаути поспіль (~24 с).
-    // Постійне рішення — індекси з supabase/products_indexes.sql.
-    if (error) ({ data, count, error } = await buildQuery(true, false));
-    // Если колонки available ещё нет в базе (миграция не выполнена) —
-    // повторяем запрос без фильтра, чтобы каталог не пустел
-    if (error) ({ data, count, error } = await buildQuery(false, false));
-    if (!error && data) {
-      setProducts(data as Product[]);
-      setTotalCount(count ?? data.length);
-    } else {
-      setProducts([]);
-      setTotalCount(0);
-    }
-    setIsLoading(false);
+
+    // Запит 1 — власне товари. Тягнемо ЛИШЕ поля картки: повний рядок із
+    // description і compatibility важив 23 КБ на сторінку замість 9 КБ.
+    // Повний товар довантажується окремо, коли картку відкривають.
+    const dataPromise = build(PRODUCT_CARD_FIELDS)
+      .order('id', { ascending: false })
+      .range(start, start + PRODUCTS_PER_PAGE - 1);
+
+    // Запит 2 — лише число. Беремо один рядок замість head: true — на
+    // HEAD-запиті, що падає по таймауту, клієнт повторював його по колу
+    // (шість зайвих запитів у заміряному прогоні).
+    const countPromise = build('id', { count: 'exact' }).range(0, 0);
+
+    const { data, error } = await dataPromise;
+    // select() рядком-змінною втрачає висновок типів у supabase-js — картка
+    // читає лише PRODUCT_CARD_FIELDS, решта полів дозаповниться при відкритті
+    if (!error && data) setProducts(data as unknown as Product[]);
+    else setProducts([]);
+    setIsLoading(false);   // товари на екрані — далі чекаємо тільки цифру
+
+    const { count, error: countError } = await countPromise;
+    if (!countError && count != null) { setTotalCount(count); return; }
+    // Точний підрахунок не встиг (57014) — таке буває на пошуку, поки не
+    // виконано supabase/products_search_indexes.sql. Ставимо -1: число в
+    // хлібних крихтах ховається, а «вперед» лишається доступним, поки
+    // сторінка приходить повною. Брехати приблизним числом не будемо.
+    setTotalCount(COUNT_UNKNOWN);
   };
 
   // Перезагружаем при смене фильтра/страницы (поиск — с дебаунсом).
@@ -1462,7 +1500,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
   // Товары приходят уже отфильтрованными и постранично с сервера.
   const paginatedProducts = products;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PRODUCTS_PER_PAGE));
+  // Коли точної кількості немає, вважаємо, що наступна сторінка є, поки
+  // поточна прийшла повною — інакше каталог обривався б на першій сторінці.
+  const totalPages = totalCount === COUNT_UNKNOWN
+    ? currentPage + (products.length === PRODUCTS_PER_PAGE ? 1 : 0)
+    : Math.max(1, Math.ceil(totalCount / PRODUCTS_PER_PAGE));
 
   // Нова сторінка — до початку списку, а не туди, де стояла кнопка «2»
   useEffect(() => {
@@ -1503,19 +1545,24 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   // На главной (категория «Усі», без поиска) вместо сетки товарів показываем опис магазину.
   const showProducts = hasFilter;
 
-  // Догружаем одиночный товар, если открыт по прямой ссылке и его нет на текущей странице
+  // Довантажуємо повний товар при відкритті. Раніше цей запит робився лише
+  // для прямих посилань, бо в списку лежав уже повний рядок. Тепер список
+  // тягне тільки поля картки, тож опис, сумісність і решта фото приходять
+  // сюди — одним запитом на відкритий товар, не на кожну картку в сітці.
   useEffect(() => {
     if (activeProductId == null) return;
-    if (products.some(p => p.id === activeProductId)) return;
     if (directProduct?.id === activeProductId) return;
     supabase.from('products').select('*').eq('id', activeProductId).single()
       .then(({ data }) => { if (data) setDirectProduct(data as Product); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProductId, products]);
+  }, [activeProductId]);
 
+  // Повний рядок має пріоритет; поки він летить, картка зі списку показує
+  // назву, ціну й фото — сторінка товару не блимає порожнечею.
   const currentProduct = useMemo(
-    () => products.find(p => p.id === activeProductId)
-      || (directProduct?.id === activeProductId ? directProduct : null),
+    () => (directProduct?.id === activeProductId ? directProduct : null)
+      || products.find(p => p.id === activeProductId)
+      || null,
     [activeProductId, products, directProduct]
   );
   // ─── Заголовок і canonical при переходах усередині сайту ──
@@ -1599,9 +1646,14 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     fetchProducts();
   };
 
-  const handleEditClick = (e: React.MouseEvent, product: Product) => {
+  const handleEditClick = async (e: React.MouseEvent, card: Product) => {
     e.preventDefault(); // картка — <a>, інакше клік по олівцю відкриє товар
     e.stopPropagation();
+    // Список тягне лише поля картки, тож brand/compatibility/description у
+    // ньому порожні. Без цього довантаження форма відкрилась би з порожніми
+    // полями й перезаписала б їх у базі при збереженні.
+    const { data } = await supabase.from('products').select('*').eq('id', card.id).single();
+    const product = (data as Product | null) || card;
     setEditingProduct(product);
     setFormName(product.name);
     setFormCategory(product.category);
@@ -2008,7 +2060,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 <>
                   <span className="text-slate-300">→</span>
                   <span className="font-semibold text-slate-800">Пошук: «{searchQuery.trim()}»</span>
-                  {!isLoading && <span className="text-xs text-slate-400">({totalCount})</span>}
+                  {!isLoading && totalCount !== COUNT_UNKNOWN && <span className="text-xs text-slate-400">({totalCount})</span>}
                 </>
               ) : selectedCategory !== 'Усі' ? (
                 <>
@@ -2054,12 +2106,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
             {/* Products Grid */}
             {showProducts && (isLoading ? (
-              <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-                  <Zap className="h-8 w-8 text-purple-600" />
-                </motion.div>
-                <p className="text-sm font-semibold text-slate-500">Завантаження товарів...</p>
-              </div>
+              <ProductGridSkeleton count={PRODUCTS_PER_PAGE} />
             ) : paginatedProducts.length === 0 ? (
               // Порожній екран — це втрачений покупець. Замість глухого кута
               // даємо живий шлях (чат: підберемо під авто) і вітрину, щоб

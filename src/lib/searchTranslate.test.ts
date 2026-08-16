@@ -22,7 +22,8 @@ assert.ok(variants('брызговики')[0].includes('бризков'), 'бр�
 const fields = (f: string) => new Set(f.split(',').map((c) => c.split('.')[0]));
 assert.deepEqual(
   [...fields(buildSearchFilters('килимки')[0])].sort(),
-  ['brand', 'category', 'compatibility', 'description', 'name', 'subcategory'],
+  ['brand', 'category', 'compatibility', 'name', 'subcategory'],
+  'description не шукаємо — див. коментар у SEARCH_FIELDS',
 );
 
 // Кілька слів — окремий фільтр на кожне (PostgREST поєднає їх через AND),
