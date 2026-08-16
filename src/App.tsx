@@ -183,11 +183,6 @@ const fadeInUp = {
   visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.5, ease: 'easeOut' as const } }),
 };
 
-const fadeIn = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.4 } },
-};
-
 
 
 // ─── Helper Components ──────────────────────────────────────
@@ -353,7 +348,7 @@ const InfoTabs = () => {
   };
 
   return (
-    <motion.section initial="hidden" animate="visible" variants={fadeInUp} className="mb-6">
+    <section className="mb-6">
       <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
         {/* Tab headers — vertical list */}
         <div className="flex flex-col divide-y">
@@ -526,7 +521,7 @@ const InfoTabs = () => {
             )}
         </div>
       </div>
-    </motion.section>
+    </section>
   );
 };
 
@@ -538,20 +533,23 @@ const trustBadges = [
   { icon: <Headphones className="h-5 w-5" />, title: 'Жива підтримка', text: 'Телефон, чат на сайті — реальні менеджери відповідають щодня' },
 ];
 
+// Смуга довіри стоїть одразу під першим екраном — до товарів. Сітка з чотирьох
+// карток забирала на телефоні майже екран, тому тут вони в один рядок, що
+// горизонтально гортається; повний опис лишився у вкладках унизу.
 const TrustBadges = () => (
-  <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn} className="mt-8">
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+  <section className="mt-4">
+    <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 sm:mx-0 sm:px-0 sm:grid sm:grid-cols-2 lg:grid-cols-4 sm:overflow-visible">
       {trustBadges.map((b) => (
-        <div key={b.title} className="bg-white border rounded-2xl p-4 flex items-start gap-3 hover:shadow-md transition-shadow">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-purple-700">{b.icon}</div>
-          <div>
-            <h3 className="text-xs font-black text-slate-900">{b.title}</h3>
-            <p className="mt-1 text-[11px] text-slate-500 leading-4">{b.text}</p>
+        <div key={b.title} className="shrink-0 w-56 sm:w-auto bg-white border rounded-xl p-3 flex items-center gap-2.5 hover:shadow-md transition-shadow">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-700">{b.icon}</div>
+          <div className="min-w-0">
+            <h3 className="text-xs font-black text-slate-900 leading-tight">{b.title}</h3>
+            <p className="mt-0.5 text-[11px] text-slate-500 leading-4 line-clamp-2">{b.text}</p>
           </div>
         </div>
       ))}
     </div>
-  </motion.section>
+  </section>
 );
 
 // ─── How We Work (етапи замовлення) ─────────────────────────
@@ -563,7 +561,7 @@ const workSteps = [
 ];
 
 const HowWeWork = () => (
-  <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn} className="mt-6">
+  <section className="mt-6">
     <div className="bg-white border rounded-2xl p-6 sm:p-8">
       <h2 className="text-lg font-black text-slate-900 mb-1">Як ми працюємо</h2>
       <p className="text-xs text-slate-500 mb-5">Простий і прозорий процес — від замовлення до отримання</p>
@@ -580,7 +578,7 @@ const HowWeWork = () => (
         ))}
       </div>
     </div>
-  </motion.section>
+  </section>
 );
 
 // ─── Store Reviews (останні відгуки покупців) ───────────────
@@ -593,7 +591,7 @@ const StoreReviews = ({ reviews, onOpenProduct }: { reviews: Review[]; onOpenPro
   if (latest.length === 0) return null;
   const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
   return (
-    <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn} className="mt-6">
+    <section className="mt-6">
       <div className="bg-white border rounded-2xl p-6 sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div>
@@ -630,7 +628,7 @@ const StoreReviews = ({ reviews, onOpenProduct }: { reviews: Review[]; onOpenPro
           ))}
         </div>
       </div>
-    </motion.section>
+    </section>
   );
 };
 
@@ -687,7 +685,7 @@ const FAQItem = ({ item, isOpen, onToggle }: { item: { q: string; a: string }; i
 const FAQSection = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
   return (
-    <motion.section initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn} className="mt-6">
+    <section className="mt-6">
       <div className="bg-white border rounded-2xl p-6 sm:p-8">
         <div className="flex items-center gap-3 mb-5">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-700">
@@ -704,7 +702,7 @@ const FAQSection = () => {
           ))}
         </div>
       </div>
-    </motion.section>
+    </section>
   );
 };
 
@@ -796,10 +794,8 @@ const heroCategories = [
   { icon: <Layers className="h-6 w-6" />, name: 'Чохли' },
 ];
 
-const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
+const Hero = ({ onBrowse, carData, onPick }: {
   onBrowse: () => void;
-  onSelectCategory: (category: string) => void;
-  onOpenChat: () => void;
   carData: Record<string, string[]>;
   onPick: (f: { mark: string; model: string; category: string; subcategory: string }) => void;
 }) => {
@@ -809,6 +805,7 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
   const [model, setModel] = useState('');
   const [cat, setCat] = useState('');
   const [sub, setSub] = useState('');
+  const [refine, setRefine] = useState(false);
   const selectCls = 'w-full rounded-xl border-0 bg-white px-3 py-3 text-sm font-semibold text-slate-700 shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-400 disabled:opacity-60';
 
   // Наявність товарів для обраного авто: { категорія: { підкатегорія: кількість } }.
@@ -859,31 +856,25 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
       style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize: '22px 22px' }}
     />
 
-    <div className="relative mx-auto max-w-7xl px-4 py-12 sm:py-16 lg:py-20">
-      <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="text-center">
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black leading-[1.1] tracking-tight">
-          Все для твого авто <span className="text-orange-400">в одному місці</span>
+    <div className="relative mx-auto max-w-7xl px-4 py-5 sm:py-8">
+      {/* Перший екран мусить помістити заголовок, форму підбору й початок сітки
+          товарів. Тому — один рядок заголовка, один рядок пояснення, і одразу
+          форма. Довгий опис магазину переїхав у SEO-блок внизу сторінки. */}
+      <div className="text-center">
+        {/* На 390px «Все для твого авто в одному місці» у 24px лізло у два рядки
+            і зжирало висоту, якої бракувало товарам, — на телефоні даємо 20px. */}
+        <h1 className="text-xl sm:text-3xl lg:text-4xl font-black leading-tight tracking-tight">
+          Все для твого авто <span className="text-orange-200">в одному місці</span>
         </h1>
-        <p className="mt-4 mx-auto max-w-4xl text-sm sm:text-base lg:text-lg text-purple-100 leading-relaxed">
-          Автохімія, килимки, дверні ручки, оптика, тюнінг та ще 20+ категорій.
-          Модельний підбір за маркою, поколінням і кузовом — від витратних дрібниць до стайлінгу.
-          Оберіть своє авто нижче — і побачите тільки ті товари, що точно підійдуть.
+        <p className="mt-1.5 text-xs sm:text-base font-medium text-purple-50">
+          Понад 65 000 товарів із підбором під конкретну модель авто
         </p>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
-          className="mt-6 text-lg sm:text-xl font-black text-orange-300"
-        >
-          Підбери під своє авто:
-        </motion.div>
-      </motion.div>
+      </div>
 
-      {/* Рядок підбору: Марка / Модель / Категорія / Підкатегорія / Показати */}
-      <motion.form
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.15 }}
+      {/* Підбір: Марка / Модель / кнопка. Категорія й підкатегорія — під
+          «уточнити»: чотири списки поспіль читались як «заповни все, інакше
+          не спрацює», хоча кнопка працювала завжди. */}
+      <form
         // Значення беремо з самої форми, а не зі стану React. Стан і те, що
         // видно у списках, могло розійтися: браузер відновлює вибір у <select>
         // після «назад»/перезавантаження, не повідомляючи React, — і кнопка
@@ -897,9 +888,9 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           if (picked.mark || picked.category) onPick(picked);
           else onBrowse();
         }}
-        className="mt-8 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 p-3 sm:p-4 shadow-2xl shadow-orange-900/30"
+        className="mt-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 p-3 shadow-xl shadow-orange-900/30"
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <select name="mark" value={mark} onChange={(e) => { setMark(e.target.value); setModel(''); }} className={selectCls}>
             {/* Довідник авто вантажиться окремим запитом — поки він порожній,
                 це видно, а не виглядає як зламаний список */}
@@ -912,45 +903,70 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
             <option value="">{mark ? '— Модель —' : '— Спочатку марка —'}</option>
             {(carData[mark] || []).map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-          <select name="cat" value={cat} onChange={(e) => { setCat(e.target.value); setSub(''); }} className={selectCls}>
-            <option value="">— Категорія —</option>
-            {Object.keys(catalogTree).map((c) => {
-              // Коли авто вибрано — показуємо кількість товарів, порожні категорії блокуємо
-              const n = catCount(c);
-              return (
-                <option key={c} value={c} disabled={n === 0}>
-                  {n === null ? c : n > 0 ? `${c} (${n})` : `${c} — немає товарів`}
-                </option>
-              );
-            })}
-          </select>
-          <select name="sub" value={sub} onChange={(e) => setSub(e.target.value)} className={selectCls}>
-            <option value="">— Підкатегорія —</option>
-            {(catalogTree[cat] || []).map((s) => {
-              const n = availCats && cat ? (availCats[cat]?.[s] || 0) : null;
-              return (
-                <option key={s} value={s} disabled={n === 0}>
-                  {n === null ? s : n > 0 ? `${s} (${n})` : `${s} — немає`}
-                </option>
-              );
-            })}
-          </select>
-          <motion.button
+          <button
             type="submit"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            className="w-full rounded-xl bg-purple-700 px-4 py-3 text-sm font-black text-white shadow-lg hover:bg-purple-800 transition flex items-center justify-center gap-2 sm:col-span-2 lg:col-span-1"
+            className="w-full rounded-xl bg-purple-800 px-4 py-3 text-sm font-black text-white shadow-lg hover:bg-purple-900 active:scale-[0.98] transition flex items-center justify-center gap-2"
           >
-            <Search className="h-4 w-4" /> Показати товари
-          </motion.button>
+            <Search className="h-4 w-4" />
+            {mark ? 'Показати товари' : 'Показати всі товари'}
+          </button>
         </div>
-      </motion.form>
 
+        <button
+          type="button"
+          onClick={() => setRefine((v) => !v)}
+          // purple-900 на помаранчевому дає 3,9:1 — нижче норми для 12px.
+          // purple-950 дає 5,3:1 на orange-500 і 7,0:1 на amber-500.
+          className="mt-2 flex items-center gap-1 text-xs font-bold text-purple-950 hover:underline transition"
+        >
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${refine ? 'rotate-180' : ''}`} />
+          Уточнити категорію — необов'язково
+        </button>
+
+        {refine && (
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <select name="cat" value={cat} onChange={(e) => { setCat(e.target.value); setSub(''); }} className={selectCls}>
+              <option value="">— Категорія —</option>
+              {Object.keys(catalogTree).map((c) => {
+                // Коли авто вибрано — показуємо кількість товарів, порожні категорії блокуємо
+                const n = catCount(c);
+                return (
+                  <option key={c} value={c} disabled={n === 0}>
+                    {n === null ? c : n > 0 ? `${c} (${n})` : `${c} — немає товарів`}
+                  </option>
+                );
+              })}
+            </select>
+            <select name="sub" value={sub} onChange={(e) => setSub(e.target.value)} className={selectCls}>
+              <option value="">— Підкатегорія —</option>
+              {(catalogTree[cat] || []).map((s) => {
+                const n = availCats && cat ? (availCats[cat]?.[s] || 0) : null;
+                return (
+                  <option key={s} value={s} disabled={n === 0}>
+                    {n === null ? s : n > 0 ? `${s} (${n})` : `${s} — немає`}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        )}
+      </form>
+    </div>
+  </section>
+  );
+};
+
+// Швидкі переходи в каталог + «чому ми» + чат. Раніше це жило всередині Hero і
+// займало чотири екрани між формою підбору й першим товаром.
+const CatalogShortcuts = ({ onSelectCategory, onBrowse, onOpenChat }: {
+  onSelectCategory: (category: string) => void;
+  onBrowse: () => void;
+  onOpenChat: () => void;
+}) => (
+  <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-700 via-violet-700 to-purple-900 text-white mt-8">
+    <div className="relative px-4 py-8 sm:px-6">
       {/* Автохімія Koch Chemie — власний склад, швидкий перехід у категорії */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
         className="mt-8 rounded-2xl border border-white/15 bg-white/10 p-4 sm:p-5 backdrop-blur"
       >
         <div className="flex items-center gap-2 mb-3">
@@ -959,16 +975,13 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           </span>
           <div className="text-left">
             <div className="text-sm sm:text-base font-black">Автохімія Koch Chemie</div>
-            <div className="text-[11px] sm:text-xs text-purple-200">Власний склад — відправка в день замовлення</div>
+            <div className="text-[11px] sm:text-xs text-purple-100">Власний склад — відправка в день замовлення</div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {chemistryCategories.map((name, i) => (
+          {chemistryCategories.map((name) => (
             <motion.button
               key={name}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.25 + i * 0.04 }}
               whileTap={{ scale: 0.96 }}
               onClick={() => onSelectCategory(name)}
               className="rounded-full bg-white/10 border border-white/15 px-3.5 py-1.5 text-xs font-semibold backdrop-blur hover:bg-orange-500 hover:border-orange-400 transition"
@@ -981,9 +994,6 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
 
       {/* Решта категорій каталогу — той самий швидкий перехід, що й у хімії */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.22 }}
         className="mt-4 rounded-2xl border border-white/15 bg-white/10 p-4 sm:p-5 backdrop-blur"
       >
         <div className="flex items-center gap-2 mb-3">
@@ -992,7 +1002,7 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           </span>
           <div className="text-left">
             <div className="text-sm sm:text-base font-black">Решта категорій</div>
-            <div className="text-[11px] sm:text-xs text-purple-200">Аксесуари, тюнінг, оптика, килимки та інше</div>
+            <div className="text-[11px] sm:text-xs text-purple-100">Аксесуари, тюнінг, оптика, килимки та інше</div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1015,9 +1025,6 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
 
       {/* Чому обирають нас */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.25 }}
         className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
       >
         {[
@@ -1025,12 +1032,9 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           { icon: <PackageCheck className="h-5 w-5" />, t: 'Прямі постачальники', d: 'Товари з офіційних складів виробників — без посередників і накруток.' },
           { icon: <Truck className="h-5 w-5" />, t: 'Швидка доставка', d: 'Відправка Новою Поштою по всій Україні, зазвичай 1-3 дні.' },
           { icon: <RotateCcw className="h-5 w-5" />, t: 'Гарантія та повернення', d: '14 днів на повернення чи обмін, допоможемо з будь-яким питанням.' },
-        ].map((b, i) => (
+        ].map((b) => (
           <motion.div
             key={b.t}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 + i * 0.07 }}
             className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-white shadow-lg shadow-orange-500/30">
@@ -1044,9 +1048,6 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
 
       {/* Онлайн підтримка 24/7 — помітний банер з CTA у чат */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.25 }}
         className="mt-10 flex flex-col sm:flex-row items-start sm:items-center gap-4 rounded-2xl border border-orange-300/30 bg-gradient-to-r from-orange-500/25 to-amber-400/10 p-4 sm:p-5 backdrop-blur"
       >
         <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-orange-500 shadow-lg shadow-orange-500/30">
@@ -1063,7 +1064,7 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
           onClick={onOpenChat}
-          className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition flex items-center justify-center gap-2"
+          className="w-full sm:w-auto bg-orange-700 hover:bg-orange-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition flex items-center justify-center gap-2"
         >
           <MessageCircle className="h-4 w-4" /> Запитати в чаті
         </motion.button>
@@ -1075,18 +1076,15 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-purple-200">Популярні категорії</p>
           <button
             onClick={onBrowse}
-            className="flex items-center gap-1 text-xs font-semibold text-orange-300 hover:text-orange-200 transition"
+            className="flex items-center gap-1 text-xs font-semibold text-orange-200 hover:text-white transition"
           >
             Всі категорії <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x md:grid md:grid-cols-6 md:overflow-visible md:mx-0 md:px-0 md:pb-0">
-          {heroCategories.map((c, i) => (
+          {heroCategories.map((c) => (
             <motion.button
               key={c.name}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.3 + i * 0.06 }}
               whileHover={{ y: -4 }}
               whileTap={{ scale: 0.96 }}
               onClick={() => onSelectCategory(c.name)}
@@ -1100,8 +1098,7 @@ const Hero = ({ onBrowse, onSelectCategory, onOpenChat, carData, onPick }: {
       </div>
     </div>
   </section>
-  );
-};
+);
 
 // ─── Main App ───────────────────────────────────────────────
 export default function App() {
@@ -1946,8 +1943,6 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           {!showProducts && (
             <Hero
               onBrowse={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setIsCatalogMenuOpen(true); }}
-              onSelectCategory={(cat) => handleCatalogMenuSelect(cat)}
-              onOpenChat={() => window.dispatchEvent(new Event('open-chat-widget'))}
               carData={carData}
               onPick={({ mark, model, category, subcategory }) => {
                 setSearchQuery('');
@@ -2046,7 +2041,15 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
             {/* Акції та новинки — тільки на головній */}
             {!showProducts && (
-              <HomeShowcase onOpen={(id) => setActiveProductId(id)} onAdd={addToCart} />
+              <>
+                <TrustBadges />
+                <HomeShowcase onOpen={(id) => setActiveProductId(id)} onAdd={addToCart} />
+                <CatalogShortcuts
+                  onSelectCategory={(cat) => handleCatalogMenuSelect(cat)}
+                  onBrowse={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setIsCatalogMenuOpen(true); }}
+                  onOpenChat={() => window.dispatchEvent(new Event('open-chat-widget'))}
+                />
+              </>
             )}
 
             {/* Products Grid */}
@@ -2198,7 +2201,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             })()}
 
             {!showProducts && (
-            <motion.section initial="hidden" whileInView="visible" variants={fadeIn} className="mt-10">
+            <section className="mt-10">
               <div className="bg-white border rounded-2xl p-6 sm:p-8 space-y-6 text-sm text-slate-600 leading-relaxed">
 
                 <div>
@@ -2274,13 +2277,12 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </div>
 
               </div>
-            </motion.section>
+            </section>
             )}
 
             {/* Блоки довіри — тільки на головній */}
             {!showProducts && (
               <>
-                <TrustBadges />
                 <HowWeWork />
                 <StoreReviews reviews={reviews} onOpenProduct={(id) => setActiveProductId(id)} />
                 <FAQSection />
