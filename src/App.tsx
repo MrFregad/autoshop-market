@@ -1329,14 +1329,16 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         .range(start, start + PRODUCTS_PER_PAGE - 1);
     };
     let { data, count, error } = await buildQuery(true);
-    // Если колонки available ещё нет в базе (миграция не выполнена) —
-    // повторяем запрос без фильтра, чтобы каталог не пустел
-    if (error) ({ data, count, error } = await buildQuery(false));
     // Точний count сканує всю вибірку і на «холодній» базі падає з statement
     // timeout (57014) — каталог показував «товарів не знайдено» на живих
-    // категоріях. Останній шанс: без count (пагінація зникне, товари будуть).
+    // категоріях. Пробуємо без count (пагінація зникне, товари будуть).
+    // Це найчастіша причина збою, тому йде першою: раніше вона стояла
+    // третьою, і покупець дивився на спінер три таймаути поспіль (~24 с).
     // Постійне рішення — індекси з supabase/products_indexes.sql.
     if (error) ({ data, count, error } = await buildQuery(true, false));
+    // Если колонки available ещё нет в базе (миграция не выполнена) —
+    // повторяем запрос без фильтра, чтобы каталог не пустел
+    if (error) ({ data, count, error } = await buildQuery(false, false));
     if (!error && data) {
       setProducts(data as Product[]);
       setTotalCount(count ?? data.length);
@@ -2056,10 +2058,25 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 <p className="text-sm font-semibold text-slate-500">Завантаження товарів...</p>
               </div>
             ) : paginatedProducts.length === 0 ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
-                <PackageCheck className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-sm font-semibold text-slate-500">Товарів не знайдено</p>
-                <p className="text-xs text-slate-400 mt-1">Спробуйте змінити категорію або пошуковий запит</p>
+              // Порожній екран — це втрачений покупець. Замість глухого кута
+              // даємо живий шлях (чат: підберемо під авто) і вітрину, щоб
+              // людині було на що клікнути далі.
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <div className="text-center py-12">
+                  <PackageCheck className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm font-semibold text-slate-500">Товарів не знайдено</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Не знайшли? Напишіть нам у чат — підберемо під ваше авто
+                  </p>
+                  <button
+                    onClick={() => window.dispatchEvent(new Event('open-chat-widget'))}
+                    className="mt-4 inline-flex items-center gap-2 rounded-full bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-purple-700 transition"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Написати у чат
+                  </button>
+                </div>
+                <HomeShowcase onOpen={(id) => setActiveProductId(id)} onAdd={addToCart} />
               </motion.div>
             ) : (
               <motion.div layout className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
