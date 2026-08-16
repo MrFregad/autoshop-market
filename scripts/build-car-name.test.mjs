@@ -1,7 +1,7 @@
 // Перевірка логіки перейменування. Запуск: node scripts/build-car-name.test.mjs
 // Усі приклади — реальні рядки з бази, а не вигадані.
 import assert from 'node:assert/strict';
-import { buildName, cleanName, carLabel, MAX_LEN } from './build-car-name.mjs';
+import { buildName, cleanName, carLabel, MAX_LEN, MAX_DROPPED } from './build-car-name.mjs';
 
 // Головний випадок із задачі: модель переїжджає з дужок у кінець назви.
 assert.equal(
@@ -43,5 +43,12 @@ const long = buildName(
 );
 assert.ok(long.name.length <= MAX_LEN, `довжина ${long.name?.length}`);
 assert.ok(long.name.endsWith('Volkswagen Caddy 2015-2020'), 'авто не обрізане');
+
+// Товар «на все підряд» не чіпаємо: 3 марки з 76 у назві гірші за стару назву.
+const tooMany = buildName('Додаткова грубка Big', Array.from({ length: 40 }, (_, i) => `Марка Модель${i} 2010-2020`).join(', '));
+assert.equal(tooMany.name, null);
+assert.equal(tooMany.reason, 'підходить надто багатьом авто');
+// А ось рівно на межі — ще перейменовуємо.
+assert.ok(MAX_DROPPED === 5);
 
 console.log('build-car-name: усі перевірки пройдено');

@@ -10,6 +10,12 @@
 
 export const MAX_LEN = 120;
 
+// Скільки авто дозволено сховати за «та інші». Товар, що підходить 76 авто,
+// у назві покаже 3 — і власник Ford Transit, побачивши Chrysler та Citroen,
+// вирішить, що це не його. Для таких назву лишаємо як була: стара нейтральна
+// краще за нову, що вводить в оману.
+export const MAX_DROPPED = 5;
+
 // «Универсальные» — це не авто, а «підходить будь-якому». У назві виглядало б
 // як сміття: «Комплект LED ламп H1 Niken Pro-series Универсальные».
 const UNIVERSAL = /^(универсальн|універсальн)/i;
@@ -87,6 +93,9 @@ export function buildName(name, compatibility) {
   }
 
   const dropped = cars.length - fits.length;
+  if (dropped > MAX_DROPPED) {
+    return { name: null, reason: 'підходить надто багатьом авто' };
+  }
   let out = `${base} ${fits.join(', ')}${dropped ? TAIL : ''}`;
 
   // Навіть одне авто не влізло — вкорочуємо саму назву по словах: марка й
