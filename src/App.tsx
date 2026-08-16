@@ -19,6 +19,10 @@ import { CatalogMegaMenu, CATEGORY_ICONS, DEFAULT_ICON } from './components/Cata
 import { catalogTree } from './catalogTree';
 import { ChatWidget } from './components/ChatWidget';
 import { buildSearchFilters } from './lib/searchTranslate';
+import {
+  trackHomeView, trackCarSelector, trackSearch, trackProductView,
+  trackAddToCart, trackCheckoutStarted, trackOrderSubmitted,
+} from './lib/analytics';
 
 // ─── Types ──────────────────────────────────────────────────
 interface Product {
@@ -1534,7 +1538,15 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     // (шість зайвих запитів у заміряному прогоні).
     const countPromise = build('id', { count: 'exact' }).range(0, 0);
 
-    const { data, error } = await dataPromise;
+    let { data, error } = await dataPromise;
+    // Один 500 — це зазвичай statement timeout на «холодній» базі, а не
+    // «товарів немає». Без повтору покупець на живому запиті бачив
+    // «Товарів не знайдено»: рівно те, від чого починався етап 1.
+    if (error) {
+      ({ data, error } = await build(PRODUCT_CARD_FIELDS)
+        .order('id', { ascending: false })
+        .range(start, start + PRODUCTS_PER_PAGE - 1));
+    }
     // select() рядком-змінною втрачає висновок типів у supabase-js — картка
     // читає лише PRODUCT_CARD_FIELDS, решта полів дозаповниться при відкритті
     if (!error && data) setProducts(data as unknown as Product[]);
@@ -1542,6 +1554,13 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     setIsLoading(false);   // товари на екрані — далі чекаємо тільки цифру
 
     const { count, error: countError } = await countPromise;
+    // Пишемо в аналітику лише пошук і лише першу сторінку: гортання
+    // сторінок — це не новий запит.
+    if (isSearching && currentPage === 1 && !error && data) {
+      // Точну кількість беремо, коли вона є; інакше довжина сторінки —
+      // головне тут відрізнити «нуль» від «щось знайшлось».
+      trackSearch(searchQuery, !countError && count != null ? count : data.length);
+    }
     if (!countError && count != null) { setTotalCount(count); return; }
     // Точний підрахунок не встиг (57014) — таке буває на пошуку, поки не
     // виконано supabase/products_search_indexes.sql. Ставимо -1: число в
@@ -1597,6 +1616,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       if (existing) return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
       return [...prev, { ...product, quantity: 1 }];
     });
+    trackAddToCart(product);
     setShowAddedToast(product.id);
     setTimeout(() => setShowAddedToast(null), 1500);
   };
@@ -1637,6 +1657,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     if (car) {
       setSearchQuery('');
       setIsSearchDropdownOpen(false);
+      trackCarSelector(car.mark, car.model);
       openCategory('Усі', null, car);
       requestAnimationFrame(() => {
         document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1735,6 +1756,20 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       || null,
     [activeProductId, products, directProduct]
   );
+
+  // Перегляд товару — коли рядок уже приїхав (у списку лежать не всі поля,
+  // тому чекаємо currentProduct, а не сам id)
+  useEffect(() => {
+    if (currentProduct) trackProductView(currentProduct);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProduct?.id]);
+
+  // Перегляд головної — саме головної, а не будь-якої сторінки: Vercel і так
+  // рахує всі перегляди, тут нас цікавить верх воронки.
+  useEffect(() => {
+    if (!showProducts && !currentProduct) trackHomeView();
+  }, [showProducts, currentProduct]);
+
   // ─── Заголовок і canonical при переходах усередині сайту ──
   // /api/meta ставить їх правильно при повному завантаженні сторінки, але далі
   // сайт міняє сторінки без перезавантаження — і в шапці лишався заголовок
@@ -1933,6 +1968,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       });
       const data = await response.json();
       if (data.ok) {
+        trackOrderSubmitted(cartCount, cartTotal);
         alert('Дякуємо! Ваше замовлення прийнято!');
         setCart([]); setOrderName(''); setOrderPhone(''); setOrderCity(''); setOrderNpOffice(''); setOrderNpRef('');
         setIsCheckoutOpen(false); setIsCartOpen(false);
@@ -2167,6 +2203,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               onBrowse={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setIsCatalogMenuOpen(true); }}
               carData={carData}
               onPick={({ mark, model, category, subcategory }) => {
+                trackCarSelector(mark, model);
                 setSearchQuery('');
                 openCategory(category || 'Усі', subcategory || null, { mark, model });
                 requestAnimationFrame(() => {
@@ -2905,7 +2942,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                     <span className="text-slate-500">Разом:</span>
                     <span className="text-xl font-black text-slate-900">{cartTotal} ₴</span>
                   </div>
-                  <motion.button whileTap={{ scale: 0.98 }} onClick={() => setIsCheckoutOpen(true)} className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2">
+                  <motion.button whileTap={{ scale: 0.98 }} onClick={() => { trackCheckoutStarted(cartCount, cartTotal); setIsCheckoutOpen(true); }} className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2">
                     Оформити замовлення <ChevronRight className="h-4 w-4" />
                   </motion.button>
                 </div>

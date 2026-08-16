@@ -14,6 +14,10 @@
   ],
   "rewrites": [
     {
+      "source": "/admin/stats",
+      "destination": "/api/stats"
+    },
+    {
       "source": "/search",
       "destination": "/api/meta?type=search"
     },
