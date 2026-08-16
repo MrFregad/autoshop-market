@@ -30,5 +30,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Перевірки запускає node (з типами node), а не збірка застосунку.
+  "exclude": ["src/**/*.test.ts"]
 }
