@@ -1124,6 +1124,169 @@ const CatalogShortcuts = ({ onSelectCategory, onBrowse, onOpenChat }: {
   </section>
 );
 
+// «Купити в 1 клік» — ім'я і телефон, решту менеджер уточнює дзвінком.
+// Йде в той самий /api/order, що й кошик: сервер вимагає адресу, тому
+// підставляємо явну позначку — власник у Telegram одразу бачить, що
+// доставку треба узгодити, а не що покупець забув її вказати.
+const QuickOrder = ({ product }: { product: Product }) => {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  if (sent) {
+    return (
+      <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+        <Check className="mx-auto h-6 w-6 text-emerald-600" />
+        <p className="mt-1.5 text-sm font-bold text-emerald-900">Замовлення прийнято!</p>
+        <p className="mt-0.5 text-xs text-emerald-700">Менеджер зателефонує найближчим часом і узгодить доставку.</p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="mt-3 rounded-xl border border-purple-200 bg-purple-50/60 p-4 space-y-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setSending(true);
+        try {
+          const resp = await fetch('/api/order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name, phone,
+              address: 'Купівля в 1 клік — доставку узгодити телефоном',
+              items: [{ id: product.id, name: product.name, quantity: 1, price: product.price }],
+            }),
+          });
+          const data = await resp.json();
+          if (data.ok) setSent(true);
+          else alert('Не вдалося відправити. Спробуйте ще раз або зателефонуйте 097-602-0714.');
+        } catch {
+          alert('Не вдалося відправити. Перевірте зв’язок.');
+        } finally { setSending(false); }
+      }}
+    >
+      <p className="text-xs font-bold text-purple-900">Залиште ім’я і телефон — передзвонимо</p>
+      <input
+        required value={name} onChange={(e) => setName(e.target.value)}
+        placeholder="Ваше ім’я" autoComplete="name"
+        className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+      />
+      <input
+        required type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+        placeholder="+380 XX XXX XX XX" autoComplete="tel"
+        className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100"
+      />
+      <button
+        type="submit" disabled={sending}
+        className="w-full rounded-lg bg-purple-700 py-2.5 text-sm font-bold text-white transition hover:bg-purple-800 disabled:opacity-60"
+      >
+        {sending ? 'Відправляємо…' : 'Замовити дзвінок'}
+      </button>
+    </form>
+  );
+};
+
+// «Марка Модель» із рядка сумісності: «Peugeot Partner Tepee 2008-2018» → без років.
+const carFromCompatibility = (compatibility?: string): string =>
+  String(compatibility || '').split(',')[0].trim().replace(/\s+\d{4}\s*[-–—]?\s*\d{0,4}\s*\+?\s*$/, '').trim();
+
+// Схожі товари під те саме авто. Шукаємо по compatibility, а не по категорії:
+// покупцю з Peugeot Partner потрібне інше на його авто, а не інші бризковики.
+const SimilarProducts = ({ product, onOpen }: { product: Product; onOpen: (id: number) => void }) => {
+  const [items, setItems] = useState<Product[]>([]);
+  const car = carFromCompatibility(product.compatibility);
+
+  useEffect(() => {
+    if (!car) return;   // без авто нічого не шукаємо; нижче рендер поверне null
+    let cancelled = false;
+    supabase.from('products')
+      .select(PRODUCT_CARD_FIELDS)
+      .ilike('compatibility', `%${car}%`)
+      .neq('id', product.id)
+      .not('available', 'is', false)
+      .limit(8)
+      .then(({ data }) => { if (!cancelled && data) setItems(data as unknown as Product[]); });
+    return () => { cancelled = true; };
+  }, [car, product.id]);
+
+  if (!car || items.length === 0) return null;
+  return (
+    <section className="mt-6 bg-white border rounded-2xl p-4 sm:p-6">
+      <h2 className="text-sm font-bold mb-4 flex items-center gap-2">
+        <CarFront className="w-4 h-4 text-purple-600" /> Схожі товари для {car}
+      </h2>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+        {items.map((p) => (
+          <a
+            key={p.id} href={`/product/${p.id}`}
+            onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); onOpen(p.id); }}
+            className="group no-underline text-inherit"
+          >
+            <div className="aspect-square rounded-xl bg-slate-50 overflow-hidden">
+              <img
+                src={thumbUrl(firstImg(p.images, p.category), 400)} alt={p.name}
+                width={400} height={400} loading="lazy" decoding="async"
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                onError={imgError(p.category)}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] text-slate-700 line-clamp-2 leading-4 group-hover:text-purple-700">{p.name}</p>
+            <p className="text-xs font-black text-slate-900">{p.price} ₴</p>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+};
+
+// Повноекранний перегляд фото. Раніше фото не збільшувалось узагалі —
+// на картинці 400px не роздивитись ні кріплення, ні фактуру.
+const Lightbox = ({ images, index, category, onClose, onIndex }: {
+  images: string[]; index: number; category: string; onClose: () => void; onIndex: (i: number) => void;
+}) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') onIndex((index + 1) % images.length);
+      if (e.key === 'ArrowLeft') onIndex((index - 1 + images.length) % images.length);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [index, images.length, onClose, onIndex]);
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/90 p-4" onClick={onClose}>
+      <button onClick={onClose} aria-label="Закрити" className="absolute top-4 right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
+        <X className="h-6 w-6" />
+      </button>
+      {images.length > 1 && (
+        <>
+          <button
+            aria-label="Попереднє фото"
+            onClick={(e) => { e.stopPropagation(); onIndex((index - 1 + images.length) % images.length); }}
+            className="absolute left-2 sm:left-6 rounded-full bg-white/10 p-3 text-white hover:bg-white/20"
+          ><ChevronLeft className="h-6 w-6" /></button>
+          <button
+            aria-label="Наступне фото"
+            onClick={(e) => { e.stopPropagation(); onIndex((index + 1) % images.length); }}
+            className="absolute right-2 sm:right-6 rounded-full bg-white/10 p-3 text-white hover:bg-white/20"
+          ><ChevronRight className="h-6 w-6" /></button>
+        </>
+      )}
+      <img
+        src={thumbUrl(images[index], 1200)} alt=""
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[85dvh] max-w-full object-contain"
+        onError={imgError(category)}
+      />
+      <span className="absolute bottom-5 text-xs font-semibold text-white/80">{index + 1} / {images.length}</span>
+    </div>
+  );
+};
+
 // ─── Main App ───────────────────────────────────────────────
 export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -1143,6 +1306,9 @@ export default function App() {
   // а якщо товар відкрили за прямим посиланням з реклами — на головну.
   const goBack = () => (location.key === 'default' ? navigate('/') : navigate(-1));
   const [linkCopied, setLinkCopied] = useState(false);
+  const [quickOrderOpen, setQuickOrderOpen] = useState(false);
+  // Індекс фото у повноекранному перегляді; null — перегляд закритий
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
 // Structured data для открытого товара
 const activeProduct = products.find(p => p.id === activeProductId) ||
@@ -1411,9 +1577,13 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     }
   }, [activeProductId, products, directProduct]);
 
-  // Прокрутка вверх при смене товара (в т.ч. при заходе по прямой ссылке)
+  // Прокрутка вверх при смене товара (в т.ч. при заходе по прямой ссылке).
+  // Форму «в 1 клік» і перегляд фото скидаємо тут же: інакше при переході
+  // на сусідній товар відкритий лайтбокс показав би фото попереднього.
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    const id = requestAnimationFrame(() => { setQuickOrderOpen(false); setLightboxIndex(null); });
+    return () => cancelAnimationFrame(id);
   }, [activeProductId]);
 
   // ─── Cart Logic ───────────────────────────────────────────
@@ -2420,119 +2590,200 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 bg-white border rounded-2xl p-3 sm:p-6 shadow-sm">
             <div className="lg:col-span-7 flex flex-col gap-3">
-              <div className="flex gap-2 overflow-x-auto shrink-0 sm:hidden">
-                {(currentProduct.images || []).map((img, index) => (
-                  <motion.button
-                    key={index}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setSelectedReviewImage(img)}
-                    className={`w-12 h-12 border-2 rounded-lg p-0.5 transition shrink-0 ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
-                  >
-                    <img src={thumbUrl(img, 150)} alt="" width={48} height={48} loading="lazy" decoding="async" className="w-full h-full object-cover rounded-md" onError={imgError(currentProduct.category)} />
-                  </motion.button>
-                ))}
+              {/* Мобільна галерея — горизонтальний свайп із прилипанням.
+                  Раніше тут був один нерухомий кадр і смужка мініатюр: на
+                  телефоні гортати фото пальцем було неможливо. */}
+              <div className="sm:hidden">
+                <div
+                  className="flex snap-x snap-mandatory overflow-x-auto rounded-xl bg-slate-50"
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    const i = Math.round(el.scrollLeft / el.clientWidth);
+                    const img = (currentProduct.images || [])[i];
+                    if (img && img !== selectedReviewImage) setSelectedReviewImage(img);
+                  }}
+                >
+                  {(currentProduct.images?.length ? currentProduct.images : [firstImg(currentProduct.images, currentProduct.category)]).map((img, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setLightboxIndex(index)}
+                      aria-label={`Відкрити фото ${index + 1} на весь екран`}
+                      className="relative aspect-square w-full shrink-0 snap-center"
+                    >
+                      {index === 0 && currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
+                      {index === 0 && <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />}
+                      <img
+                        src={thumbUrl(img, 800)} alt={currentProduct.name}
+                        width={800} height={800} loading={index === 0 ? 'eager' : 'lazy'} decoding="async"
+                        className="h-full w-full object-contain"
+                        onError={imgError(currentProduct.category)}
+                      />
+                    </button>
+                  ))}
+                </div>
+                {(currentProduct.images?.length || 0) > 1 && (
+                  <p className="mt-1.5 text-center text-[11px] text-slate-500">
+                    Гортайте пальцем · {currentProduct.images.length} фото · торкніться, щоб збільшити
+                  </p>
+                )}
               </div>
+
+              {/* Десктоп: мініатюри збоку + великий кадр, клік відкриває на весь екран */}
               <div className="hidden sm:flex gap-3">
                 <div className="flex flex-col gap-2 shrink-0">
                   {(currentProduct.images || []).map((img, index) => (
-                    <motion.button
+                    <button
                       key={index}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
                       onClick={() => setSelectedReviewImage(img)}
-                      className={`w-14 h-14 border-2 rounded-xl p-0.5 transition ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
+                      className={`w-14 h-14 border-2 rounded-xl p-0.5 transition hover:scale-105 ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
                     >
                       <img src={thumbUrl(img, 150)} alt="" width={56} height={56} loading="lazy" decoding="async" className="w-full h-full object-cover rounded-lg" onError={imgError(currentProduct.category)} />
-                    </motion.button>
+                    </button>
                   ))}
                 </div>
-                <div className="flex-1 aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center max-h-[460px] relative">
+                <button
+                  onClick={() => setLightboxIndex(Math.max(0, (currentProduct.images || []).indexOf(selectedReviewImage || '')))}
+                  aria-label="Відкрити фото на весь екран"
+                  className="flex-1 aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center max-h-[460px] relative group cursor-zoom-in"
+                >
                   {currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
                   <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />
-                  <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={thumbUrl(selectedReviewImage || firstImg(currentProduct.images, currentProduct.category), 800)} alt="" className="w-full h-full object-contain" onError={imgError(currentProduct.category)} />
-                </div>
-              </div>
-              <div className="sm:hidden aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center relative">
-                {currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
-                <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />
-                <motion.img key={selectedReviewImage} initial={{ opacity: 0 }} animate={{ opacity: 1 }} src={thumbUrl(selectedReviewImage || firstImg(currentProduct.images, currentProduct.category), 800)} alt="" className="w-full h-full object-contain" onError={imgError(currentProduct.category)} />
+                  <img
+                    src={thumbUrl(selectedReviewImage || firstImg(currentProduct.images, currentProduct.category), 800)}
+                    alt={currentProduct.name} className="w-full h-full object-contain"
+                    onError={imgError(currentProduct.category)}
+                  />
+                  <span className="absolute bottom-3 right-3 rounded-lg bg-slate-900/70 px-2.5 py-1 text-[11px] font-semibold text-white opacity-0 group-hover:opacity-100 transition">
+                    Збільшити
+                  </span>
+                </button>
               </div>
             </div>
 
-            <div className="lg:col-span-5 flex flex-col justify-between lg:pl-6">
-              <div>
-                <span className="inline-block bg-purple-50 text-purple-700 text-[10px] font-bold px-3 py-1 rounded-full mb-3">{currentProduct.category}</span>
-                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight mb-3">{currentProduct.name}</h1>
-                <div className="flex items-center gap-2 mb-4">
-                  {currentProductReviews.length > 0 ? (
+            <div className="lg:col-span-5 flex flex-col lg:pl-6">
+              <span className="inline-block self-start bg-purple-50 text-purple-700 text-[10px] font-bold px-3 py-1 rounded-full mb-2">{currentProduct.category}</span>
+              <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{currentProduct.name}</h1>
+
+              {/* Наявність — з поля available у базі, а не «поки хардкодом»:
+                  колонка вже є і імпорт її оновлює, тож плашка чесна. */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {currentProduct.available === false ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 border border-slate-200">
+                    <X className="h-3.5 w-3.5" /> Немає в наявності
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                    <Check className="h-3.5 w-3.5" /> В наявності
+                  </span>
+                )}
+                {currentProductReviews.length > 0 && (
+                  <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                    {currentRating.toFixed(1)} · {currentProductReviews.length} відгуків
+                  </span>
+                )}
+              </div>
+
+              {/* Сумісність — головне питання покупця («чи підійде мені?»).
+                  Раніше вона лежала у вкладці «Характеристики» під фото. */}
+              {currentProduct.compatibility && (
+                <div className="mt-3 rounded-2xl border-2 border-purple-200 bg-purple-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-700 text-white">
+                      <CarFront className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-purple-700">Підходить для</p>
+                      <p className="mt-0.5 text-sm font-black leading-snug text-slate-900">{currentProduct.compatibility}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-3 bg-gradient-to-br from-slate-50 to-purple-50/30 border border-purple-100 rounded-2xl p-4">
+                <div className="flex items-baseline gap-3 flex-wrap">
+                  <span className="text-3xl font-black text-slate-900">{currentProduct.price} ₴</span>
+                  {currentProduct.old_price && (
                     <>
-                      <div className="flex text-amber-400">
-                        {[...Array(5)].map((_, i) => <Star key={i} className={`h-4 w-4 ${i < Math.round(currentRating) ? 'fill-current' : 'text-slate-300'}`} />)}
-                      </div>
-                      <span className="text-xs text-slate-500">
-                        {currentRating.toFixed(1)} · {currentProductReviews.length} відгуків
+                      <span className="text-sm text-slate-400 line-through">{currentProduct.old_price} ₴</span>
+                      <span className="text-sm font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                        -{Math.round(((currentProduct.old_price - currentProduct.price) / currentProduct.old_price) * 100)}%
                       </span>
                     </>
-                  ) : (
-                    <span className="text-xs text-slate-400">Ще немає відгуків</span>
                   )}
                 </div>
-                <div className="bg-gradient-to-br from-slate-50 to-purple-50/30 border border-purple-100 rounded-2xl p-5 mb-4">
-                  <div className="flex items-baseline gap-3">
-                    <span className="text-3xl font-black text-slate-900">{currentProduct.price} ₴</span>
-                    {currentProduct.old_price && (
-                      <>
-                        <span className="text-sm text-slate-400 line-through">{currentProduct.old_price} ₴</span>
-                        <span className="text-sm font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
-                          -{Math.round(((currentProduct.old_price - currentProduct.price) / currentProduct.old_price) * 100)}%
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  {currentProduct.old_price && (
-                    <p className="text-xs text-emerald-600 font-semibold mt-2 flex items-center gap-1">
-                      <Percent className="w-3 h-3" /> Економія {currentProduct.old_price - currentProduct.price} ₴
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2 mb-4">
-                  {currentProduct.brand && <div className="flex justify-between text-xs"><span className="text-slate-500">Виробник</span><span className="font-semibold">{currentProduct.brand}</span></div>}
-                  {currentProduct.color && <div className="flex justify-between text-xs"><span className="text-slate-500">Колір</span><span className="font-semibold">{currentProduct.color}</span></div>}
-                  {currentProduct.condition && <div className="flex justify-between text-xs"><span className="text-slate-500">Стан</span><span className="font-bold text-emerald-600">{currentProduct.condition}</span></div>}
-                </div>
+                {currentProduct.old_price && (
+                  <p className="text-xs text-emerald-700 font-semibold mt-1.5 flex items-center gap-1">
+                    <Percent className="w-3 h-3" /> Економія {currentProduct.old_price - currentProduct.price} ₴
+                  </p>
+                )}
               </div>
-              <div className="mt-2 space-y-2">
+
+              <div className="mt-3 space-y-2">
                 {currentProduct.available === false ? (
-                  <div className="w-full bg-slate-100 text-slate-500 py-3 rounded-xl font-bold text-center border border-slate-200">
+                  <div className="w-full bg-slate-100 text-slate-500 py-3.5 rounded-xl font-bold text-center border border-slate-200">
                     Немає в наявності
                   </div>
                 ) : (
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => addToCart(currentProduct)}
-                    className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3 rounded-xl font-bold shadow-lg hover:shadow-xl transition flex items-center justify-center gap-2"
-                  >
-                    <ShoppingCart className="h-5 w-5" /> Додати в кошик
-                  </motion.button>
+                  <>
+                    <button
+                      onClick={() => addToCart(currentProduct)}
+                      className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3.5 rounded-xl font-bold text-base shadow-lg hover:shadow-xl active:scale-[0.99] transition flex items-center justify-center gap-2"
+                    >
+                      <ShoppingCart className="h-5 w-5" /> Додати в кошик
+                    </button>
+                    <button
+                      onClick={() => setQuickOrderOpen((v) => !v)}
+                      className="w-full bg-white border-2 border-purple-300 text-purple-800 py-2.5 rounded-xl font-bold text-sm hover:bg-purple-50 transition flex items-center justify-center gap-2"
+                    >
+                      <PhoneCall className="h-4 w-4" /> Купити в 1 клік
+                    </button>
+                    {quickOrderOpen && <QuickOrder product={currentProduct} />}
+                  </>
                 )}
-                <motion.button
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    const url = `${window.location.origin}/product/${currentProduct.id}`;
-                    navigator.clipboard?.writeText(url).then(() => {
-                      setLinkCopied(true);
-                      setTimeout(() => setLinkCopied(false), 1800);
-                    });
-                  }}
-                  className="w-full bg-white border border-purple-200 text-purple-700 py-2.5 rounded-xl font-semibold text-sm hover:bg-purple-50 transition flex items-center justify-center gap-2"
-                >
-                  {linkCopied
-                    ? <><Check className="h-4 w-4 text-emerald-600" /> Посилання скопійовано!</>
-                    : <><Link2 className="h-4 w-4" /> Скопіювати посилання на товар</>}
-                </motion.button>
               </div>
+
+              {/* Чотири причини не боятись замовляти — прямо біля кнопки,
+                  а не десь у футері, куди покупець уже не дійде. */}
+              <ul className="mt-3 grid grid-cols-1 gap-1.5 rounded-xl border bg-white p-3">
+                {[
+                  { icon: <Wallet className="h-4 w-4" />, t: 'Оплата при отриманні' },
+                  { icon: <Truck className="h-4 w-4" />, t: 'Нова Пошта — 1-3 дні' },
+                  { icon: <RotateCcw className="h-4 w-4" />, t: 'Повернення 14 днів' },
+                  { icon: <ShieldCheck className="h-4 w-4" />, t: 'Гарантія на всі товари' },
+                ].map((b) => (
+                  <li key={b.t} className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                    <span className="text-purple-700">{b.icon}</span>{b.t}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="flex-1 text-xs font-semibold text-amber-950">
+                  Не впевнені, що підійде? Напишіть у чат — перевіримо за VIN
+                </p>
+                <button
+                  onClick={() => window.dispatchEvent(new Event('open-chat-widget'))}
+                  className="shrink-0 rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800 transition flex items-center justify-center gap-1.5"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Запитати в чаті
+                </button>
+              </div>
+
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/product/${currentProduct.id}`;
+                  navigator.clipboard?.writeText(url).then(() => {
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 1800);
+                  });
+                }}
+                className="mt-3 w-full text-slate-600 py-2 rounded-xl font-semibold text-xs hover:text-purple-700 transition flex items-center justify-center gap-2"
+              >
+                {linkCopied
+                  ? <><Check className="h-4 w-4 text-emerald-600" /> Посилання скопійовано!</>
+                  : <><Link2 className="h-4 w-4" /> Скопіювати посилання на товар</>}
+              </button>
             </div>
           </motion.div>
 
@@ -2545,10 +2796,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               <p className="text-xs text-slate-600 bg-purple-50/50 p-4 rounded-xl leading-6">{currentProduct.description || "Опис відсутній."}</p>
               <table className="w-full text-xs">
                 <tbody className="divide-y">
-                  <tr><td className="py-3 text-slate-400 w-1/3">Виробник</td><td className="py-3 text-slate-800 font-semibold">{currentProduct.brand || "—"}</td></tr>
-                  <tr><td className="py-3 text-slate-400">Сумісність</td><td className="py-3 text-slate-600">{currentProduct.compatibility || "—"}</td></tr>
-                  <tr><td className="py-3 text-slate-400">Стан</td><td className="py-3 text-emerald-600 font-bold">{currentProduct.condition || "—"}</td></tr>
-                  <tr><td className="py-3 text-slate-400">Колір</td><td className="py-3 text-slate-800 font-medium">{currentProduct.color || "—"}</td></tr>
+                  <tr><td className="py-3 text-slate-500 w-1/3">Сумісність</td><td className="py-3 text-slate-900 font-semibold">{currentProduct.compatibility || "—"}</td></tr>
+                  <tr><td className="py-3 text-slate-500">Виробник</td><td className="py-3 text-slate-800 font-semibold">{currentProduct.brand || "—"}</td></tr>
+                  <tr><td className="py-3 text-slate-500">Стан</td><td className="py-3 text-emerald-700 font-bold">{currentProduct.condition || "—"}</td></tr>
+                  <tr><td className="py-3 text-slate-500">Колір</td><td className="py-3 text-slate-800 font-medium">{currentProduct.color || "—"}</td></tr>
                 </tbody>
               </table>
             </motion.div>
@@ -2562,7 +2813,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   {currentProductReviews.length === 0 ? (
                     <div className="text-center py-8">
                       <Star className="h-8 w-8 text-slate-200 mx-auto mb-2" />
-                      <p className="text-xs text-slate-400">Ще немає відгуків. Будьте першим!</p>
+                      <p className="text-xs text-slate-500">Ще немає відгуків. Будьте першим!</p>
                     </div>
                   ) : (
                     currentProductReviews.map((rev) => (
@@ -2595,6 +2846,18 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               </form>
             </motion.div>
           </div>
+
+          <SimilarProducts product={currentProduct} onOpen={(id) => setActiveProductId(id)} />
+
+          {lightboxIndex !== null && (currentProduct.images?.length || 0) > 0 && (
+            <Lightbox
+              images={currentProduct.images}
+              index={Math.min(lightboxIndex, currentProduct.images.length - 1)}
+              category={currentProduct.category}
+              onClose={() => setLightboxIndex(null)}
+              onIndex={setLightboxIndex}
+            />
+          )}
         </main>
       )}
 
