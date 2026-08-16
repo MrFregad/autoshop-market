@@ -29,3 +29,6 @@ marketing/out/
 
 dropt-import-preview.json
 ddaudio-import-preview.json
+
+# состояние одноразового скрипта переименования (для перезапуска с места обрыва)
+scripts/.add-car-to-names-state.json
