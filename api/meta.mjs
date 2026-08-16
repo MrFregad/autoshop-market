@@ -48,10 +48,22 @@ const setMeta = (html, key, value) =>
   html.replace(new RegExp(`<meta\\s+${key}[\\s\\S]*?/>`), `<meta ${key} content="${esc(value)}" />`);
 
 /** Збирає готовий HTML із оболонки. Чиста функція — її й перевіряє demo() внизу. */
-export function injectMeta(shell, { title, description, canonical, image, jsonLd, body }) {
+export function injectMeta(shell, { title, description, canonical, image, jsonLd, body, robots, prev, next }) {
   let html = shell
     .replace(/<title>[\s\S]*?<\/title>/, `<title>${esc(title)}</title>`)
     .replace(/<link rel="canonical"[^>]*>/, `<link rel="canonical" href="${esc(canonical)}" />`);
+
+  // Сторінки пошуку й фільтрів індексувати не можна: це нескінченний простір
+  // адрес із майже однаковим текстом, і робот витрачає на нього обхід замість
+  // карток товарів.
+  if (robots) html = setMeta(html, 'name="robots"', robots);
+
+  // rel=prev/next зв'язують сторінки пагінації в одну послідовність
+  const afterCanonical = (rel, href) =>
+    html.replace(/(<link rel="canonical"[^>]*>)/, `$1
+    <link rel="${rel}" href="${esc(href)}" />`);
+  if (prev) html = afterCanonical('prev', prev);
+  if (next) html = afterCanonical('next', next);
 
   html = setMeta(html, 'name="description"', description);
   html = setMeta(html, 'property="og:url"', canonical);
@@ -64,9 +76,10 @@ export function injectMeta(shell, { title, description, canonical, image, jsonLd
     html = setMeta(html, 'name="twitter:image"', image);
   }
 
-  if (jsonLd) {
+  // jsonLd — один об'єкт або масив (товар + хлібні крихти)
+  for (const block of [jsonLd].flat().filter(Boolean)) {
     // JSON.stringify екранує </script> недостатньо — ріжемо косу риску
-    const safe = JSON.stringify(jsonLd).replace(/</g, '\\u003c');
+    const safe = JSON.stringify(block).replace(/</g, '\\u003c');
     html = html.replace('</head>', `  <script type="application/ld+json">${safe}</script>\n  </head>`);
   }
 
@@ -77,6 +90,38 @@ export function injectMeta(shell, { title, description, canonical, image, jsonLd
 
   return html;
 }
+
+// ─── Хлібні крихти ──────────────────────────────────────────
+// Дають Google шлях замість голого URL у видачі і показують структуру сайту.
+// Приймає масив [{ name, url }]; останній елемент — сама сторінка.
+export function breadcrumbs(items) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((it, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: it.name,
+      ...(it.url ? { item: it.url.startsWith('http') ? it.url : SITE + it.url } : {}),
+    })),
+  };
+}
+
+// ─── Пагінація ──────────────────────────────────────────────
+// Сторінка 2+ мусить мати власні товари, власний заголовок і canonical на
+// себе. Раніше ?page=3 віддавала байт-у-байт першу сторінку: Google бачив
+// десятки дублікатів, а товари з другої сторінки й далі не бачив узагалі.
+export const HUB_PAGE = (v) => {
+  const n = Number(Array.isArray(v) ? v[0] : v);
+  return Number.isInteger(n) && n > 1 && n <= 500 ? n : 1;
+};
+
+// Адреса сторінки пагінації: ?page=1 не існує, це просто canonical без параметра
+export const pageHref = (base, n) => (n > 1 ? `${base}?page=${n}` : base);
+
+// Заголовок і опис отримують « — сторінка N», інакше всі сторінки категорії
+// мають однаковий <title> і Google лишає в індексі лише одну з них.
+export const withPage = (text, page) => (page > 1 ? `${text} — сторінка ${page}` : text);
 
 // Обрізає рядок по межі слова
 const clip = (s, n) => {
@@ -115,19 +160,46 @@ const productLinks = (items) =>
       '</ul>'
     : '';
 
+// Видимі посилання на сусідні сторінки. rel=prev/next у <head> — підказка,
+// а ходить робот по звичайних <a>: без них товари з другої сторінки й далі
+// не мають жодного вхідного посилання на сайті.
+const pagerLinks = (base, page, hasNext) => {
+  const parts = [];
+  if (page > 1) parts.push(`<a href="${esc(pageHref(base, page - 1))}" style="color:#6d28d9">← Попередня сторінка</a>`);
+  if (hasNext) parts.push(`<a href="${esc(pageHref(base, page + 1))}" style="color:#6d28d9">Наступна сторінка →</a>`);
+  return parts.length ? `<p style="margin:20px 0 0;display:flex;gap:20px">${parts.join('')}</p>` : '';
+};
+
 // Помилка тут не повинна ламати сторінку — просто лишиться без списку
-async function hubProducts(filter) {
+// Беремо на один товар більше, ніж показуємо: зайвий рядок — це і є
+// відповідь «чи є наступна сторінка», без окремого запиту з count.
+async function hubProducts(filter, page = 1) {
   try {
-    return await sbGet(
-      `products?select=id,name,price&${filter}&available=not.is.false&order=id.desc&limit=${HUB_LIMIT}`
+    const offset = (page - 1) * HUB_LIMIT;
+    const rows = await sbGet(
+      `products?select=id,name,price&${filter}&available=not.is.false&order=id.desc&offset=${offset}&limit=${HUB_LIMIT + 1}`
     );
+    return { items: rows.slice(0, HUB_LIMIT), hasNext: rows.length > HUB_LIMIT };
   } catch {
-    return [];
+    return { items: [], hasNext: false };
   }
 }
 
 // PostgREST: елемент масиву з пробілами/комами треба брати в лапки
 const arrayContains = (col, value) => `${col}=cs.${encodeURIComponent(`{"${value}"}`)}`;
+
+// Оцінки для aggregateRating. Помилка не має ламати сторінку — просто
+// лишиться без зірочок у видачі.
+async function fetchRating(id) {
+  try {
+    const rows = await sbGet(`reviews?select=rating&product_id=eq.${encodeURIComponent(id)}`);
+    if (!rows.length) return null;
+    const sum = rows.reduce((a, r) => a + Number(r.rating || 0), 0);
+    return { value: Math.round((sum / rows.length) * 10) / 10, count: rows.length };
+  } catch {
+    return null;
+  }
+}
 
 async function fetchProduct(id) {
   const fields =
@@ -141,7 +213,7 @@ async function fetchProduct(id) {
   return p ?? null;
 }
 
-export function productPage(shell, p) {
+export function productPage(shell, p, rating = null) {
   const canonical = `${SITE}/product/${p.id}`;
   const image = Array.isArray(p.images) ? p.images[0] : null;
   const fit = carFit(p);
@@ -185,7 +257,29 @@ export function productPage(shell, p) {
           : 'https://schema.org/NewCondition',
       seller: { '@id': `${SITE}/#organization` },
     },
+    // Зірочки у видачі. Додаємо лише коли відгуки справді є: вигаданий
+    // рейтинг — привід для ручних санкцій Google.
+    ...(rating
+      ? {
+          aggregateRating: {
+            '@type': 'AggregateRating',
+            ratingValue: String(rating.value),
+            reviewCount: String(rating.count),
+            bestRating: '5',
+            worstRating: '1',
+          },
+        }
+      : {}),
   };
+
+  const crumbs = breadcrumbs([
+    { name: 'Головна', url: '/' },
+    ...(p.category ? [{ name: p.category, url: `/category/${encodeURIComponent(p.category)}` }] : []),
+    ...(p.category && p.subcategory
+      ? [{ name: p.subcategory, url: `/category/${encodeURIComponent(p.category)}/${encodeURIComponent(p.subcategory)}` }]
+      : []),
+    { name: p.name, url: canonical },
+  ]);
 
   // Цей блок бачать краулери без JS; React затирає його при монтуванні.
   // Інлайн-стилі — щоб до завантаження бандла показувалась не «гола» розмітка,
@@ -202,33 +296,49 @@ export function productPage(shell, p) {
       `<p style="white-space:pre-line;margin:0">${esc(plain(p.description, 1200, true))}</p>`
   );
 
-  return injectMeta(shell, { title, description, canonical, image, jsonLd, body });
+  return injectMeta(shell, { title, description, canonical, image, jsonLd: [jsonLd, crumbs], body });
 }
 
-export function categoryPage(shell, cat, sub, items = []) {
+export function categoryPage(shell, cat, sub, items = [], page = 1, hasNext = false) {
   const name = sub || cat;
-  const canonical = `${SITE}/category/${encodeURIComponent(cat)}${sub ? `/${encodeURIComponent(sub)}` : ''}`;
-  const title = `${name} — купити в Україні | AutoShop Market`;
-  const description = `${name}: великий вибір автотоварів за цінами постачальника. Доставка Новою Поштою по всій Україні, оплата при отриманні.`;
+  const base = `${SITE}/category/${encodeURIComponent(cat)}${sub ? `/${encodeURIComponent(sub)}` : ''}`;
+  // Canonical веде на саму сторінку, а не на першу: інакше Google вважає
+  // сторінки 2+ дублікатами й не бере з них жодного товару.
+  const canonical = pageHref(base, page);
+  const title = `${withPage(name, page)} — купити в Україні | AutoShop Market`;
+  const description = withPage(
+    `${name}: великий вибір автотоварів за цінами постачальника. Доставка Новою Поштою по всій Україні, оплата при отриманні.`,
+    page
+  );
 
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name,
+    name: withPage(name, page),
     url: canonical,
     description,
     isPartOf: { '@id': `${SITE}/#website` },
   };
 
+  const crumbs = breadcrumbs([
+    { name: 'Головна', url: '/' },
+    { name: cat, url: `${SITE}/category/${encodeURIComponent(cat)}` },
+    ...(sub ? [{ name: sub, url: base }] : []),
+    ...(page > 1 ? [{ name: `Сторінка ${page}`, url: canonical }] : []),
+  ]);
+
   return injectMeta(shell, {
     title,
     description,
     canonical,
-    jsonLd,
+    jsonLd: [jsonLd, crumbs],
+    prev: page > 1 ? pageHref(base, page - 1) : null,
+    next: hasNext ? pageHref(base, page + 1) : null,
     body: wrap(
-      `<h1 style="font-size:26px;line-height:1.25;margin:0 0 12px">${esc(name)}</h1>` +
+      `<h1 style="font-size:26px;line-height:1.25;margin:0 0 12px">${esc(withPage(name, page))}</h1>` +
         `<p style="margin:0;color:#4b5563">${esc(description)}</p>` +
-        productLinks(items)
+        productLinks(items) +
+        pagerLinks(base, page, hasNext)
     ),
   });
 }
@@ -309,7 +419,7 @@ export function catalogHref(slugs) {
   return '/catalog/' + seg.map((s) => s || ANY_SEGMENT).join('/');
 }
 
-export function catalogPage(shell, { mark, model, category, sub }, items = []) {
+export function catalogPage(shell, { mark, model, category, sub }, items = [], page = 1, hasNext = false) {
   const car = [mark, model].filter(Boolean).join(' ');
   const what = sub || category || 'Автотовари та тюнінг';
   const name = car ? `${what} для ${model || mark}` : what;
@@ -319,10 +429,10 @@ export function catalogPage(shell, { mark, model, category, sub }, items = []) {
   // мусить вказувати на повний варіант, інакше Google бачить два дублікати.
   // Модель, що дорівнює марці («/catalog/acura/acura») — теж сама марка.
   const modelSlug = !model || toSlug(model) === toSlug(mark) ? '' : toSlug(model);
-  const canonical =
-    SITE + catalogHref([toSlug(mark), modelSlug, toSlug(category), toSlug(sub)]);
+  const base = SITE + catalogHref([toSlug(mark), modelSlug, toSlug(category), toSlug(sub)]);
+  const canonical = pageHref(base, page);
 
-  const title = clip(name, 62) + ' | AutoShop Market';
+  const title = clip(withPage(name, page), 62) + ' | AutoShop Market';
   const description = clip(
     `${name} — модельний підбір${car ? ` під ${car}` : ''}. Ціни постачальника, ` +
       `перевірена сумісність, доставка Новою Поштою по всій Україні, оплата при отриманні.`,
@@ -332,22 +442,53 @@ export function catalogPage(shell, { mark, model, category, sub }, items = []) {
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name,
+    name: withPage(name, page),
     url: canonical,
     description,
     isPartOf: { '@id': `${SITE}/#website` },
     ...(car ? { about: { '@type': 'Product', name: car } } : {}),
   };
 
+  const crumbs = breadcrumbs([
+    { name: 'Головна', url: '/' },
+    ...(mark ? [{ name: mark, url: SITE + catalogHref([toSlug(mark)]) }] : []),
+    ...(model && modelSlug ? [{ name: model, url: SITE + catalogHref([toSlug(mark), modelSlug]) }] : []),
+    ...(category ? [{ name: category, url: SITE + catalogHref([toSlug(mark), modelSlug, toSlug(category)]) }] : []),
+    ...(sub ? [{ name: sub, url: base }] : []),
+    ...(page > 1 ? [{ name: `Сторінка ${page}`, url: canonical }] : []),
+  ]);
+
   return injectMeta(shell, {
     title,
     description,
     canonical,
-    jsonLd,
+    jsonLd: [jsonLd, crumbs],
+    prev: page > 1 ? pageHref(base, page - 1) : null,
+    next: hasNext ? pageHref(base, page + 1) : null,
     body: wrap(
-      `<h1 style="font-size:26px;line-height:1.25;margin:0 0 12px">${esc(name)}</h1>` +
+      `<h1 style="font-size:26px;line-height:1.25;margin:0 0 12px">${esc(withPage(name, page))}</h1>` +
         `<p style="margin:0;color:#4b5563">${esc(description)}</p>` +
-        productLinks(items)
+        productLinks(items) +
+        pagerLinks(base, page, hasNext)
+    ),
+  });
+}
+
+// ─── Пошук: у індекс не пускаємо ────────────────────────────
+// /search?q=будь-що — нескінченний простір адрес. Робот ходив би по ньому
+// замість карток товарів, а в індексі осідали б сотні майже однакових
+// сторінок. noindex, але follow: посилання з них хай передають вагу далі.
+export function searchPage(shell, q) {
+  const query = String(q ?? '').trim();
+  return injectMeta(shell, {
+    title: query ? `Пошук: ${clip(query, 40)} | AutoShop Market` : 'Пошук | AutoShop Market',
+    description: 'Пошук автотоварів у каталозі AutoShop Market.',
+    canonical: `${SITE}/`,
+    robots: 'noindex, follow',
+    body: wrap(
+      `<h1 style="font-size:26px;margin:0 0 12px">Пошук${query ? `: ${esc(query)}` : ''}</h1>` +
+        `<p style="margin:0;color:#4b5563">Результати пошуку завантажуються. ` +
+        `<a href="/" style="color:#6d28d9">Перейти до каталогу</a>.</p>`
     ),
   });
 }
@@ -363,7 +504,8 @@ async function getShell(host) {
 }
 
 export default async function handler(req, res) {
-  const { type, id, cat, sub, mark, model } = req.query ?? {};
+  const { type, id, cat, sub, mark, model, q } = req.query ?? {};
+  const page = HUB_PAGE(req.query?.page);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
   let shell;
@@ -380,7 +522,12 @@ export default async function handler(req, res) {
       // товару немає — чесний 404, щоб Google прибрав мертву адресу з індексу
       if (!p) return res.status(404).send(shell);
       res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-      return res.status(200).send(productPage(shell, p));
+      return res.status(200).send(productPage(shell, p, await fetchRating(p.id)));
+    }
+    if (type === 'search') {
+      // кешувати нема сенсу: адрес нескінченно багато, а сторінка все одно noindex
+      res.setHeader('Cache-Control', 'public, s-maxage=3600');
+      return res.status(200).send(searchPage(shell, q));
     }
     if (type === 'catalog') {
       const seg = (v) => (v && v !== ANY_SEGMENT ? decodeURIComponent(v) : '');
@@ -393,8 +540,11 @@ export default async function handler(req, res) {
         found.category && `category=eq.${encodeURIComponent(found.category)}`,
         found.sub && `subcategory=eq.${encodeURIComponent(found.sub)}`,
       ].filter(Boolean).join('&');
+      const cataloged = await hubProducts(filter, page);
+      // Сторінка за межами вибірки — 404, інакше ?page=999 плодила б порожні дублікати
+      if (page > 1 && !cataloged.items.length) return res.status(404).send(shell);
       res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-      return res.status(200).send(catalogPage(shell, found, await hubProducts(filter)));
+      return res.status(200).send(catalogPage(shell, found, cataloged.items, page, cataloged.hasNext));
     }
     const catName = decodeURIComponent(cat ?? '');
     const subName = sub && decodeURIComponent(sub);
@@ -405,8 +555,10 @@ export default async function handler(req, res) {
       `category=eq.${encodeURIComponent(catName.replace(/-/g, '/'))}`,
       subName && `subcategory=eq.${encodeURIComponent(subName)}`,
     ].filter(Boolean).join('&');
+    const hub = await hubProducts(catFilter, page);
+    if (page > 1 && !hub.items.length) return res.status(404).send(shell);
     res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-    return res.status(200).send(categoryPage(shell, catName, subName, await hubProducts(catFilter)));
+    return res.status(200).send(categoryPage(shell, catName, subName, hub.items, page, hub.hasNext));
   } catch (err) {
     // сторінка не повинна падати через Supabase — віддаємо звичайну оболонку
     console.error('meta:', err.message);
@@ -536,6 +688,71 @@ async function demo() {
   assert.deepEqual(await resolveCatalog(['volkswagen', 'passat-b5']), {
     mark: 'Volkswagen', model: 'Volkswagen Passat B5 1997-2005', category: '', sub: '',
   });
+
+
+  // ── 6.4 хлібні крихти ──
+  const ldOf = (html) =>
+    [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) =>
+      JSON.parse(m[1].replace(/\\u003c/g, '<'))
+    );
+  const crumbOf = (html) => ldOf(html).find((d) => d['@type'] === 'BreadcrumbList');
+  const pc = crumbOf(html);
+  assert.ok(pc, 'на товарі немає BreadcrumbList');
+  assert.deepEqual(pc.itemListElement.map((i) => i.name), ['Головна', 'Дефлектори', base.name]);
+  assert.equal(pc.itemListElement[0].position, 1);
+
+  // ── 6.5 рейтинг: тільки коли відгуки справді є ──
+  const noRating = ldOf(html).find((d) => d['@type'] === 'Product');
+  assert.ok(!noRating.aggregateRating, 'рейтинг вигаданий там, де відгуків немає');
+  const rated = ldOf(productPage(shell, base, { value: 4.7, count: 12 })).find((d) => d['@type'] === 'Product');
+  assert.equal(rated.aggregateRating.ratingValue, '4.7');
+  assert.equal(rated.aggregateRating.reviewCount, '12');
+
+  // ── 6.1 пагінація ──
+  const items = [{ id: 1, name: 'Товар', price: 10 }];
+  const p1 = categoryPage(shell, 'Килимки', null, items, 1, true);
+  const p3 = categoryPage(shell, 'Килимки', null, items, 3, true);
+  const canonicalOfPage = (h) => /<link rel="canonical" href="([^"]*)"/.exec(h)[1];
+
+  // головне: сторінка 3 більше не видає себе за першу
+  assert.equal(canonicalOfPage(p1), 'https://autoshopmarket.com.ua/category/%D0%9A%D0%B8%D0%BB%D0%B8%D0%BC%D0%BA%D0%B8');
+  assert.equal(canonicalOfPage(p3), canonicalOfPage(p1) + '?page=3');
+  assert.notEqual(
+    /<title>([\s\S]*?)<\/title>/.exec(p1)[1],
+    /<title>([\s\S]*?)<\/title>/.exec(p3)[1],
+    'у сторінок пагінації однаковий title — Google лишить одну'
+  );
+  assert.match(p3, /<title>[^<]*сторінка 3/);
+  assert.match(p3, /<link rel="prev" href="[^"]*\?page=2" \/>/);
+  assert.match(p3, /<link rel="next" href="[^"]*\?page=4" \/>/);
+  assert.ok(!p1.includes('rel="prev"'), 'на першій сторінці є rel=prev');
+  // видимі посилання: робот ходить по <a>, а не по rel=next
+  assert.match(p3, /<a href="[^"]*\?page=2"[^>]*>← Попередня/);
+  assert.match(p3, /<a href="[^"]*\?page=4"[^>]*>Наступна/);
+  // остання сторінка — без «наступної»
+  assert.ok(!categoryPage(shell, 'Килимки', null, items, 3, false).includes('rel="next"'));
+  assert.equal(HUB_PAGE('3'), 3);
+  assert.equal(HUB_PAGE('0'), 1);
+  assert.equal(HUB_PAGE('abc'), 1);
+  assert.equal(HUB_PAGE(undefined), 1);
+  assert.equal(HUB_PAGE('9999'), 1, 'абсурдна сторінка не має ставати адресою');
+
+  // крихти категорії показують сторінку
+  assert.deepEqual(crumbOf(p3).itemListElement.map((i) => i.name), ['Головна', 'Килимки', 'Сторінка 3']);
+
+  // пагінація каталогу за авто — те саме
+  const cat2 = catalogPage(shell, vw, items, 2, true);
+  assert.equal(canonicalOfPage(cat2), canonicalOf(cars) + '?page=2');
+  assert.match(cat2, /<link rel="prev"/);
+
+  // ── 6.2 пошук не потрапляє в індекс ──
+  const sp = searchPage(shell, 'килимки');
+  assert.match(sp, /<meta name="robots" content="noindex, follow" \/>/);
+  assert.equal(canonicalOfPage(sp), 'https://autoshopmarket.com.ua/');
+  assert.match(sp, /<title>Пошук: килимки/);
+  // а звичайні сторінки лишаються відкритими
+  assert.ok(!p1.includes('noindex'), 'категорія випадково закрита від індексації');
+  assert.ok(!html.includes('noindex'), 'картка товару випадково закрита від індексації');
 
   console.log('ok');
 }
