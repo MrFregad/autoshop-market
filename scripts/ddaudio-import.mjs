@@ -609,27 +609,4 @@ console.log(`\nОбновляю справочник марок/моделей (
   }
 }
 
-// Карта сайту після імпорту — інакше вона застаріває мовчки: минулого разу
-// в ній не було 14 490 товарів, тобто Google просто не знав про їхні адреси.
-// Помилка тут не має валити імпорт: товари вже в базі, карту завжди можна
-// зібрати вручну через `npm run sitemap`.
-// Карта сайту після імпорту. Запускаємо ОКРЕМИМ процесом, а не import():
-// generate-sitemap.mjs при збої Supabase робить process.exit(1), і в спільному
-// процесі це вбивало б увесь імпорт — товари вже залиті, а прогон позначений
-// як провалений. Дочірній процес такого зробити не може.
-//
-// У CI пропускаємо: GitHub Actions комітить лише src/catalogTree.ts, тож
-// зібрана там карта осідає на диску раннера і викидається разом із ним.
-// Сенс у ній лише при локальному запуску, звідки її можна закомітити.
-if (process.env.CI) {
-  console.log('\nCI: sitemap не збираю (файли тут однаково не зберігаються).');
-} else {
-  console.log('\nОновлюю sitemap...');
-  const { spawnSync } = await import('node:child_process');
-  const { fileURLToPath } = await import('node:url');
-  const script = fileURLToPath(new URL('generate-sitemap.mjs', import.meta.url));
-  const r = spawnSync(process.execPath, [script], { stdio: 'inherit' });
-  if (r.status !== 0) console.warn('Не вдалося оновити sitemap — зберіть вручну: npm run sitemap');
-}
-
 console.log('\nГотово! Импорт DD Audio завершён.');

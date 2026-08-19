@@ -9,7 +9,6 @@
     "lint": "eslint .",
     "test": "node --experimental-strip-types src/lib/searchTranslate.test.ts",
     "preview": "vite preview",
-    "sitemap": "node scripts/generate-sitemap.mjs",
     "fb:catalog": "node scripts/generate-fb-catalog.mjs",
     "fb:post": "node scripts/fb-publish.mjs",
     "youtube:ideas": "node scripts/youtubeMarketingBot.mjs ideas",

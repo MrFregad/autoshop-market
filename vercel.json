@@ -14,6 +14,14 @@
   ],
   "rewrites": [
     {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
+    {
+      "source": "/sitemap-:page(\\d+).xml",
+      "destination": "/api/sitemap?page=:page"
+    },
+    {
       "source": "/admin/stats",
       "destination": "/api/stats"
     },
@@ -50,7 +58,7 @@
       "destination": "/api/meta?type=catalog&mark=:mark&model=:model&cat=:cat&sub=:sub"
     },
     {
-      "source": "/((?!api/|sitemap[^/]*\\.xml|facebook-catalog\\.xml|robots\\.txt).*)",
+      "source": "/((?!api/|facebook-catalog\\.xml|robots\\.txt).*)",
       "destination": "/index.html"
     }
   ]
