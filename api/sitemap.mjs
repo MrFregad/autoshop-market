@@ -167,30 +167,48 @@ async function walkCategories(lo, hi) {
   return out;
 }
 
+// Один повтор: запит до бази зрідка відвалюється по таймауту.
+const retry = async (fn) => {
+  try { return await fn(); }
+  catch { await new Promise((r) => setTimeout(r, 400)); return fn(); }
+};
+
 /**
- * Сторінка N товарів.
+ * Межа сторінки N: id товару на позиції N*CHUNK у ПОВНІЙ таблиці, без
+ * фільтра наявності.
  *
- * Рівно ОДИН offset-запит як точка входу, далі keyset (id > курсор).
- * Заміряно на живій базі: offset на глибині коштує 300-3000 мс і час від
- * часу відвалюється по таймауту, keyset — стабільні 155-235 мс. Перша
- * версія тягла вісім offset-запитів паралельно й отримала порожній
- * sitemap-5 при живому sitemap-8: база не витримувала залпу.
+ * Чому без фільтра: offset із `available=eq.true` на глибині коштує
+ * 0,4-3 с і на Vercel стабільно відвалювався — сторінки 3-8 віддавали
+ * порожню карту, хоча локально збирались. Той самий offset по чистому
+ * первинному ключу — 255-300 мс і жодного збою.
+ *
+ * Нерівність сторінок від цього не страшна: важливо, щоб діапазони
+ * покривали всі товари й не перетинались, а скільки саме адрес у кожному
+ * файлі — Google байдуже, доки їх менше 50 000.
+ */
+async function boundaryId(nth) {
+  const { rows } = await retry(() =>
+    sb(`products?select=id&order=id.asc&offset=${nth - 1}&limit=1`)
+  );
+  return rows.length ? rows[0].id : null;
+}
+
+/**
+ * Сторінка N товарів: keyset-обхід у межах діапазону id.
+ * Заміряно: keyset — стабільні 155-235 мс на 1000 рядків, offset на
+ * глибині — до 3 с і час від часу 500.
  */
 async function loadProductPage(page) {
-  const from = (page - 1) * CHUNK;
-  let cursor = 0;
-  if (from > 0) {
-    const { rows } = await retry(() =>
-      sb(`products?select=id&${LIVE}&order=id.asc&offset=${from - 1}&limit=1`)
-    );
-    if (!rows.length) return [];   // сторінка за межами каталогу
-    cursor = rows[0].id;
-  }
+  const lo = page === 1 ? 0 : await boundaryId((page - 1) * CHUNK);
+  if (lo === null) return [];                       // сторінка за межами каталогу
+  const hiId = await boundaryId(page * CHUNK);      // null на останній сторінці
+  const upper = hiId === null ? '' : `&id=lte.${hiId}`;
 
   const out = [];
-  for (let i = 0; i < PAGE_BATCHES; i++) {
+  let cursor = lo;
+  for (let i = 0; i < CHUNK / BATCH + 2; i++) {
     const { rows } = await retry(() =>
-      sb(`products?select=id&${LIVE}&id=gt.${cursor}&order=id.asc&limit=${BATCH}`)
+      sb(`products?select=id&${LIVE}&id=gt.${cursor}${upper}&order=id.asc&limit=${BATCH}`)
     );
     if (!rows.length) break;
     out.push(...rows);
@@ -199,6 +217,7 @@ async function loadProductPage(page) {
   }
   return out.map((p) => `/product/${p.id}`);
 }
+
 
 export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
@@ -210,7 +229,7 @@ export default async function handler(req, res) {
 
   try {
     if (!Number.isInteger(page) || page < 1) {
-      const { range } = await sb(`products?select=id&${LIVE}`, { count: true });
+      const { range } = await sb('products?select=id', { count: true });
       return res.status(200).send(sitemapIndex(fileCount(estimateFrom(range))));
     }
     if (page === 1) {
