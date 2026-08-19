@@ -132,20 +132,33 @@ async function loadCars() {
  * Список категорій. PostgREST не вміє DISTINCT, а сканувати 72 тис. рядків
  * заради 36 назв не влазить у таймаут. Тому йдемо по індексу
  * (category, id desc) стрибками: беремо найменшу назву, потім першу більшу
- * за неї — кожен крок це пошук по індексу, ~130 мс. 36 категорій за ~5 с,
- * і відповідь однаково кешується на добу.
+ * за неї — кожен крок це пошук по індексу.
+ *
+ * Впирається не в базу, а в мережу: 36 кроків поспіль — це 36 звернень по
+ * ~130 мс, разом ~5 с при ліміті функції Vercel 10 с. Тому алфавіт розбито
+ * на відрізки й обходи йдуть паралельно.
  *
  * Довідник авто для цього не годиться: категорії власного складу
  * (автохімія, COLOURLOCK) з жодним авто не пов'язані, і в карті бракувало
  * 16 сторінок із 36.
  */
+const CATEGORY_SEEDS = ['', 'А', 'Ж', 'Л', 'Р', 'Ф'];
+
 async function loadCategories() {
+  const walks = await Promise.all(
+    CATEGORY_SEEDS.map((lo, i) => walkCategories(lo, CATEGORY_SEEDS[i + 1]))
+  );
+  return [...new Set(walks.flat())].sort();
+}
+
+async function walkCategories(lo, hi) {
   const out = [];
-  let cursor = null;
-  for (let i = 0; i < 100; i++) {
-    const after = cursor === null ? '' : `&category=gt.${encodeURIComponent(cursor)}`;
+  let cursor = lo;
+  const upper = hi ? `&category=lt.${encodeURIComponent(hi)}` : '';
+  for (let i = 0; i < 50; i++) {
+    const after = cursor ? `&category=gt.${encodeURIComponent(cursor)}` : '';
     const { rows } = await sb(
-      `products?select=category&${LIVE}${after}&category=not.is.null&order=category.asc&limit=1`
+      `products?select=category&category=not.is.null${after}${upper}&order=category.asc&limit=1`
     );
     if (!rows.length) break;
     cursor = rows[0].category;
@@ -153,12 +166,6 @@ async function loadCategories() {
   }
   return out;
 }
-
-// Один повтор: глибокий offset на «холодній» базі іноді віддає 500.
-const retry = async (fn) => {
-  try { return await fn(); }
-  catch { await new Promise((r) => setTimeout(r, 400)); return fn(); }
-};
 
 /**
  * Сторінка N товарів.
