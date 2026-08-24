@@ -38,6 +38,7 @@
 //     (supplier IS NULL и категория не из списка Koch Chemie).
 
 import { createClient } from '@supabase/supabase-js';
+import { buildName } from './build-car-name.mjs';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -359,8 +360,19 @@ for (const [sku, g] of bySku) {
   }
 
   feedSkus.add(sku);
+  // Марка й модель авто в назві — не разова акція, а частина імпорту.
+  // Спершу це був окремий скрипт: він перейменував 70 134 товари, а
+  // наступний же нічний імпорт записав назви постачальника назад — з
+  // 15 000 перевірених рядків перейменованими лишився 1%. Через це в
+  // каталозі знову з'явились сотні однакових назв («Гумові килимки
+  // (4 шт, Stingray Premium)» × 342 на різні авто), і Google справедливо
+  // тримав їх у «Обнаружена, не проиндексирована».
+  const rawName = (item.title || '').trim();
+  const built = buildName(rawName, compatibility);
   products.push({
-    name: (item.title || '').trim(),
+    name: built.name || rawName,
+    // Оригінальна назва постачальника — страховка для відкату
+    name_original: rawName,
     category,
     subcategory,
     price,
