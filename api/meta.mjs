@@ -235,14 +235,12 @@ export function productPage(shell, p, rating = null) {
     ...(image ? { image } : {}),
     ...(p.brand ? { brand: { '@type': 'Brand', name: p.brand } } : {}),
     ...(p.category ? { category: [p.category, p.subcategory].filter(Boolean).join(' / ') } : {}),
-    ...(fit.all
-      ? {
-          isAccessoryOrSparePartFor: (Array.isArray(p.models) && p.models.length
-            ? p.models
-            : [fit.all]
-          ).map((m) => ({ '@type': 'Product', name: m })),
-        }
-      : {}),
+    // isAccessoryOrSparePartFor тут БУВ і його прибрано свідомо. За схемою
+    // це поле приймає Product, тож авто («Peugeot Partner Tepee 2008-2018»)
+    // ставало товаром без ціни — і Search Console позначила це критичною
+    // помилкою «задайте offers, review або aggregateRating» на КОЖНІЙ картці.
+    // Сумісність від цього не губиться: вона є в назві товару, в описі
+    // й у видимому тексті сторінки.
     description: plain(p.description, 900) || p.name,
     offers: {
       '@type': 'Offer',
@@ -446,7 +444,8 @@ export function catalogPage(shell, { mark, model, category, sub }, items = [], p
     url: canonical,
     description,
     isPartOf: { '@id': `${SITE}/#website` },
-    ...(car ? { about: { '@type': 'Product', name: car } } : {}),
+    // Те саме: авто — не товар на продаж. Thing не тягне за собою вимогу ціни.
+    ...(car ? { about: { '@type': 'Thing', name: car } } : {}),
   };
 
   const crumbs = breadcrumbs([
@@ -598,7 +597,11 @@ async function demo() {
   // сумісність робить заголовок унікальним — інакше 696 однакових <title>
   assert.match(html, /<title>[^<]*Toyota Camry/, 'модель авто не потрапила в title');
   assert.ok(/<title>([\s\S]*?)<\/title>/.exec(html)[1].length <= 90, 'title задовгий');
-  assert.match(html, /"isAccessoryOrSparePartFor":\[\{"@type":"Product","name":"Toyota Camry/);
+  // Авто НЕ повинно бути Product: Search Console вимагала б у нього ціну.
+  // Єдиний Product на сторінці — сам товар, і в нього offers є.
+  const products = html.split('"@type":"Product"').length - 1;
+  assert.equal(products, 1, 'на сторінці більше одного Product — авто знову стало товаром');
+  assert.ok(!html.includes('isAccessoryOrSparePartFor'), 'авто знову заявлене як товар');
   assert.match(html, /content="[^"]*сумісність: Toyota Camry 2011–2017, Audi A4/);
 
   // екранування працює і всередині стилізованої обгортки
