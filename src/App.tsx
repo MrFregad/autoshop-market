@@ -1521,8 +1521,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
       // marks/models — массивы (товар подходит нескольким авто), ищем вхождение
       if (carModel) query = query.contains('models', [carModel]);
       else if (carMark) query = query.contains('marks', [carMark]);
-      // Товары без наличия у поставщика скрываем от покупателей (админ видит всё)
-      if (!isAdminMode) query = query.not('available', 'is', false);
+      // Товари без наявності НЕ ховаємо: вони показуються з плашкою
+      // «Під замовлення» і їх можна замовити — менеджер уточнює термін.
       return query;
     };
 
@@ -1607,10 +1607,6 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
   // ─── Cart Logic ───────────────────────────────────────────
   const addToCart = (product: Product) => {
-    if (product.available === false) {
-      alert('На жаль, цього товару зараз немає в наявності.');
-      return;
-    }
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       if (existing) return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
@@ -2378,6 +2374,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                         >
                           <span className="bg-white/90 text-purple-700 text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg">Переглянути</span>
                         </motion.div>
+                        {product.available === false && (
+                          <span className="absolute left-2 bottom-2 z-10 rounded-full bg-amber-100 border border-amber-300 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                            Під замовлення
+                          </span>
+                        )}
                       </div>
 
                       <div className="mt-2 flex flex-col flex-grow justify-between">
@@ -2399,7 +2400,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); addToCart(product); }}
                             className="mt-2 w-full bg-purple-600 text-white py-2 rounded-lg text-[11px] font-bold hover:bg-purple-700 transition flex items-center justify-center gap-1 min-h-[36px]"
                           >
-                            <ShoppingCart className="w-3 h-3" /> Купити
+                            <ShoppingCart className="w-3 h-3" /> {product.available === false ? 'Замовити' : 'Купити'}
                           </motion.button>
                         </div>
                       </div>
@@ -2705,8 +2706,8 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   колонка вже є і імпорт її оновлює, тож плашка чесна. */}
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {currentProduct.available === false ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 border border-slate-200">
-                    <X className="h-3.5 w-3.5" /> Немає в наявності
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 border border-amber-200">
+                    <PhoneCall className="h-3.5 w-3.5" /> Під замовлення
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
@@ -2757,27 +2758,24 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
               </div>
 
               <div className="mt-3 space-y-2">
-                {currentProduct.available === false ? (
-                  <div className="w-full bg-slate-100 text-slate-500 py-3.5 rounded-xl font-bold text-center border border-slate-200">
-                    Немає в наявності
-                  </div>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => addToCart(currentProduct)}
-                      className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3.5 rounded-xl font-bold text-base shadow-lg hover:shadow-xl active:scale-[0.99] transition flex items-center justify-center gap-2"
-                    >
-                      <ShoppingCart className="h-5 w-5" /> Додати в кошик
-                    </button>
-                    <button
-                      onClick={() => setQuickOrderOpen((v) => !v)}
-                      className="w-full bg-white border-2 border-purple-300 text-purple-800 py-2.5 rounded-xl font-bold text-sm hover:bg-purple-50 transition flex items-center justify-center gap-2"
-                    >
-                      <PhoneCall className="h-4 w-4" /> Купити в 1 клік
-                    </button>
-                    {quickOrderOpen && <QuickOrder product={currentProduct} />}
-                  </>
+                {currentProduct.available === false && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    Товару зараз немає на складі — оформіть замовлення, і менеджер уточнить термін поставки.
+                  </p>
                 )}
+                <button
+                  onClick={() => addToCart(currentProduct)}
+                  className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3.5 rounded-xl font-bold text-base shadow-lg hover:shadow-xl active:scale-[0.99] transition flex items-center justify-center gap-2"
+                >
+                  <ShoppingCart className="h-5 w-5" /> {currentProduct.available === false ? 'Замовити' : 'Додати в кошик'}
+                </button>
+                <button
+                  onClick={() => setQuickOrderOpen((v) => !v)}
+                  className="w-full bg-white border-2 border-purple-300 text-purple-800 py-2.5 rounded-xl font-bold text-sm hover:bg-purple-50 transition flex items-center justify-center gap-2"
+                >
+                  <PhoneCall className="h-4 w-4" /> Купити в 1 клік
+                </button>
+                {quickOrderOpen && <QuickOrder product={currentProduct} />}
               </div>
 
               {/* Чотири причини не боятись замовляти — прямо біля кнопки,

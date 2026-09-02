@@ -9,6 +9,7 @@ interface Product {
   images: string[];
   brand?: string;
   description?: string;
+  available?: boolean;
 }
 
 export function useProductStructuredData(product: Product | null) {
@@ -35,7 +36,9 @@ export function useProductStructuredData(product: Product | null) {
         "url": `https://autoshopmarket.com.ua/product/${product.id}`,
         "priceCurrency": "UAH",
         "price": product.price,
-        "availability": "https://schema.org/InStock",
+        "availability": product.available === false
+          ? "https://schema.org/BackOrder"
+          : "https://schema.org/InStock",
         "seller": {
           "@type": "Organization",
           "name": "AutoShop Market"

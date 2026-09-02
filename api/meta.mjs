@@ -222,7 +222,7 @@ export function productPage(shell, p, rating = null) {
   const title = clip(`${p.name}${fit.first ? ` для ${fit.first}` : ''}`, 65) + ' | AutoShop Market';
   const description = clip(
     `${p.name}${fit.all ? ` — сумісність: ${fit.all}.` : '.'} Ціна ${p.price} грн.` +
-      `${inStock ? ' В наявності.' : ' Немає в наявності.'} Доставка Новою Поштою по Україні.`,
+      `${inStock ? ' В наявності.' : ' Під замовлення.'} Доставка Новою Поштою по Україні.`,
     300
   );
 
@@ -247,7 +247,8 @@ export function productPage(shell, p, rating = null) {
       url: canonical,
       price: String(p.price),
       priceCurrency: 'UAH',
-      availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+      // «Під замовлення» — це BackOrder, а не OutOfStock: товар можна купити
+      availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/BackOrder',
       itemCondition:
         (p.condition || '').toLowerCase().startsWith('б') ||
         (p.condition || '').toLowerCase().includes('вжив')
@@ -287,7 +288,7 @@ export function productPage(shell, p, rating = null) {
       (fit.all ? `<p style="margin:0 0 12px;color:#4b5563">Сумісність: ${esc(fit.all)}</p>` : '') +
       (p.brand ? `<p style="margin:0 0 4px;color:#4b5563">Бренд: ${esc(p.brand)}</p>` : '') +
       `<p style="font-size:24px;font-weight:700;color:#6d28d9;margin:0 0 4px">${esc(p.price)} грн</p>` +
-      `<p style="margin:0 0 16px;color:${inStock ? '#15803d' : '#b91c1c'}">${inStock ? 'В наявності' : 'Немає в наявності'}</p>` +
+      `<p style="margin:0 0 16px;color:${inStock ? '#15803d' : '#b45309'}">${inStock ? 'В наявності' : 'Під замовлення'}</p>` +
       (image
         ? `<img src="${esc(image)}" alt="${esc(p.name)}" style="max-width:100%;height:auto;border-radius:12px;margin:0 0 16px" />`
         : '') +
@@ -628,9 +629,9 @@ async function demo() {
   // наявність не можна хардкодити — 14 286 товарів у БД available=false
   assert.match(html, /schema\.org\/InStock/);
   const outHtml = productPage(shell, { ...base, available: false });
-  assert.match(outHtml, /schema\.org\/OutOfStock/);
-  assert.ok(!outHtml.includes('schema.org/InStock'), 'InStock лишився для недоступного товару');
-  assert.match(outHtml, /Немає в наявності/);
+  assert.match(outHtml, /schema\.org\/BackOrder/);
+  assert.ok(!outHtml.includes('schema.org/InStock'), 'InStock лишився для товару під замовлення');
+  assert.match(outHtml, /Під замовлення/);
 
   const catHtml = categoryPage(shell, "Інтер'єр", null, [
     { id: 42, name: 'Килимок EVA "тест"', price: 990 },
