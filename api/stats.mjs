@@ -17,6 +17,8 @@ const SUPABASE_URL = process.env.SUPABASE_URL || 'https://vhvedefyixgluayqahhh.s
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 
 const DAYS = 30;
+// Коротші запити — майже завжди обрізки набору, а не справжній пошук
+const MIN_QUERY = 4;
 const TOP = 50;
 const MAX_ROWS = 100000;
 
@@ -31,14 +33,19 @@ export function summarize(rows) {
   const empty = new Map();
   for (const r of rows) {
     const q = String(r.query ?? '').trim().toLowerCase();
-    if (!q) continue;
+    // Обрізки набору у звіт не пускаємо. До 03.09 подія висіла на самому
+    // наборі тексту, і в журналі осіли «деф», «дефл», «дефле» окремими
+    // рядками — вони б очолили таблицю «чого не знайшли», хоча дефлекторів
+    // у каталозі 2 328. Записи вже в базі не чіпаємо, просто не показуємо.
+    if (q.length < MIN_QUERY) continue;
     all.set(q, (all.get(q) || 0) + 1);
     if (Number(r.results) === 0) empty.set(q, (empty.get(q) || 0) + 1);
   }
   const top = (m) => [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, TOP);
+  const real = rows.filter((r) => String(r.query ?? '').trim().length >= MIN_QUERY);
   return {
-    total: rows.length,
-    emptyTotal: rows.filter((r) => Number(r.results) === 0).length,
+    total: real.length,
+    emptyTotal: real.filter((r) => Number(r.results) === 0).length,
     top: top(all),
     topEmpty: top(empty),
   };
@@ -157,8 +164,9 @@ async function demo() {
     { query: '   ', results: 0 },
   ]);
 
-  assert.equal(s.total, 7);
-  assert.equal(s.emptyTotal, 4, 'порожні рахуються по results === 0');
+  // порожній запит і обрізки в підсумок не входять — рахуємо справжні пошуки
+  assert.equal(s.total, 6);
+  assert.equal(s.emptyTotal, 3, 'порожні рахуються по results === 0');
   // регістр і пробіли не мають плодити різні рядки у звіті
   assert.deepEqual(s.top[0], ['шноркель', 3]);
   assert.deepEqual(s.top[1], ['килимки', 2], 'Килимки й «килимки » — один запит');
@@ -166,6 +174,18 @@ async function demo() {
   assert.ok(!s.top.some(([q]) => !q.trim()));
   // головна таблиця — лише те, що нічого не знайшло
   assert.deepEqual(s.topEmpty, [['шноркель', 3]]);
+
+  // Найкоротші обрізки набору («к», «б», «деф») у звіт не потрапляють.
+  // Довші відсікти довжиною неможливо — від них рятує те, що подія тепер
+  // висить на відправленому пошуку, а не на наборі тексту (App.tsx).
+  const noisy = summarize([
+    { query: 'к', results: 0 },
+    { query: 'деф', results: 0 },
+    { query: 'дефлектори', results: 2328 },
+  ]);
+  assert.equal(noisy.total, 1, 'обрізки набору порахувались як пошуки');
+  assert.deepEqual(noisy.topEmpty, [], 'обрізок потрапив у «нічого не знайшли»');
+  assert.deepEqual(noisy.top, [['дефлектори', 1]]);
 
   // порожній журнал не ламає звіт
   const zero = summarize([]);
