@@ -198,6 +198,10 @@ const fadeInUp = {
 
 
 // ─── Helper Components ──────────────────────────────────────
+// Навігація — лише справжні <a href> (Link): по кнопках Googlebot не ходить,
+// і сторінки каталогу лишались сиротами, відомими тільки з sitemap.
+const MotionLink = motion.create(Link);
+
 const DiscountBadge = ({ oldPrice, price }: { oldPrice?: number; price: number }) => {
   if (!oldPrice || oldPrice <= price) return null;
   const percent = Math.round(((oldPrice - price) / oldPrice) * 100);
@@ -253,11 +257,10 @@ const ProductGridSkeleton = ({ count = 18 }: { count?: number }) => (
   </div>
 );
 
-const ShowcaseRow = ({ title, icon, items, onOpen, onAdd }: {
+const ShowcaseRow = ({ title, icon, items, onAdd }: {
   title: string;
   icon: React.ReactNode;
   items: Product[];
-  onOpen: (id: number) => void;
   onAdd: (p: Product) => void;
 }) => {
   if (items.length === 0) return null;
@@ -266,10 +269,10 @@ const ShowcaseRow = ({ title, icon, items, onOpen, onAdd }: {
       <h2 className="flex items-center gap-2 text-lg font-black text-slate-900 mb-3">{icon}{title}</h2>
       <div className="flex gap-3 overflow-x-auto pb-2 snap-x">
         {items.map((p) => (
-          <div
+          <Link
             key={p.id}
-            onClick={() => onOpen(p.id)}
-            className="snap-start shrink-0 w-[45%] sm:w-[190px] bg-white border rounded-2xl p-3 flex flex-col justify-between relative cursor-pointer hover:shadow-xl transition-shadow group"
+            to={`/product/${p.id}`}
+            className="snap-start shrink-0 w-[45%] sm:w-[190px] bg-white border rounded-2xl p-3 flex flex-col justify-between relative cursor-pointer hover:shadow-xl transition-shadow group no-underline text-inherit"
           >
             <DiscountBadge oldPrice={p.old_price} price={p.price} />
             <div className="aspect-square w-full overflow-hidden rounded-xl bg-slate-50">
@@ -293,21 +296,21 @@ const ShowcaseRow = ({ title, icon, items, onOpen, onAdd }: {
                 <span className="text-sm font-black text-slate-900">{p.price} ₴</span>
                 <motion.button
                   whileTap={{ scale: 0.95 }}
-                  onClick={(e) => { e.stopPropagation(); onAdd(p); }}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAdd(p); }}
                   className="mt-2 w-full bg-purple-600 text-white py-2 rounded-lg text-[11px] font-bold hover:bg-purple-700 transition flex items-center justify-center gap-1 min-h-[36px]"
                 >
                   <ShoppingCart className="w-3 h-3" /> Купити
                 </motion.button>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </section>
   );
 };
 
-const HomeShowcase = ({ onOpen, onAdd }: { onOpen: (id: number) => void; onAdd: (p: Product) => void }) => {
+const HomeShowcase = ({ onAdd }: { onAdd: (p: Product) => void }) => {
   const [sale, setSale] = useState<Product[]>([]);
   const [fresh, setFresh] = useState<Product[]>([]);
 
@@ -349,8 +352,8 @@ const HomeShowcase = ({ onOpen, onAdd }: { onOpen: (id: number) => void; onAdd: 
 
   return (
     <>
-      <ShowcaseRow title="Акції" icon={<Percent className="h-5 w-5 text-red-500" />} items={sale} onOpen={onOpen} onAdd={onAdd} />
-      <ShowcaseRow title="Новинки" icon={<Sparkles className="h-5 w-5 text-sky-500" />} items={fresh} onOpen={onOpen} onAdd={onAdd} />
+      <ShowcaseRow title="Акції" icon={<Percent className="h-5 w-5 text-red-500" />} items={sale} onAdd={onAdd} />
+      <ShowcaseRow title="Новинки" icon={<Sparkles className="h-5 w-5 text-sky-500" />} items={fresh} onAdd={onAdd} />
     </>
   );
 };
@@ -610,7 +613,7 @@ const HowWeWork = () => (
 );
 
 // ─── Store Reviews (останні відгуки покупців) ───────────────
-const StoreReviews = ({ reviews, onOpenProduct }: { reviews: Review[]; onOpenProduct: (id: number) => void }) => {
+const StoreReviews = ({ reviews }: { reviews: Review[] }) => {
   // Останні відгуки з бази — реальні, з прив'язкою до товару
   const latest = useMemo(
     () => [...reviews].sort((a, b) => b.id - a.id).slice(0, 6),
@@ -636,10 +639,10 @@ const StoreReviews = ({ reviews, onOpenProduct }: { reviews: Review[]; onOpenPro
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {latest.map((rev) => (
-            <button
+            <Link
               key={rev.id}
-              onClick={() => onOpenProduct(rev.product_id)}
-              className="text-left rounded-xl border bg-slate-50/60 p-4 hover:shadow-md hover:border-purple-200 transition"
+              to={`/product/${rev.product_id}`}
+              className="block text-left rounded-xl border bg-slate-50/60 p-4 hover:shadow-md hover:border-purple-200 transition no-underline text-inherit"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-bold text-slate-800">{rev.author}</span>
@@ -652,7 +655,7 @@ const StoreReviews = ({ reviews, onOpenProduct }: { reviews: Review[]; onOpenPro
               <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-purple-600">
                 Переглянути товар <ChevronRight className="h-3 w-3" />
               </span>
-            </button>
+            </Link>
           ))}
         </div>
       </div>
@@ -772,6 +775,9 @@ const otherCategories = Object.keys(catalogTree).filter((c) => c !== 'Автох
 // косу риску («Багажники/Дуги на дах») міняємо на дефіс, щоб не ламати шлях.
 const allCategories = [...Object.keys(catalogTree), ...chemistryCategories, 'Брендована продукція'];
 const categorySlug = (name: string) => encodeURIComponent(name.replace(/\//g, '-'));
+const categoryHref = (category: string, subcategory?: string | null) =>
+  category === 'Усі' ? '/catalog'
+    : `/category/${categorySlug(category)}${subcategory ? `/${encodeURIComponent(subcategory)}` : ''}`;
 const slugToCategory = (slug: string) => {
   const decoded = decodeURIComponent(slug);
   return allCategories.find((c) => c.replace(/\//g, '-') === decoded)
@@ -986,8 +992,8 @@ const Hero = ({ onBrowse, carData, onPick }: {
 
 // Швидкі переходи в каталог + «чому ми» + чат. Раніше це жило всередині Hero і
 // займало чотири екрани між формою підбору й першим товаром.
-const CatalogShortcuts = ({ onSelectCategory, onBrowse, onOpenChat }: {
-  onSelectCategory: (category: string) => void;
+const CatalogShortcuts = ({ onNavigate, onBrowse, onOpenChat }: {
+  onNavigate: () => void;
   onBrowse: () => void;
   onOpenChat: () => void;
 }) => (
@@ -1008,14 +1014,15 @@ const CatalogShortcuts = ({ onSelectCategory, onBrowse, onOpenChat }: {
         </div>
         <div className="flex flex-wrap gap-2">
           {chemistryCategories.map((name) => (
-            <motion.button
+            <MotionLink
               key={name}
+              to={categoryHref(name)}
               whileTap={{ scale: 0.96 }}
-              onClick={() => onSelectCategory(name)}
+              onClick={onNavigate}
               className="rounded-full bg-white/10 border border-white/15 px-3.5 py-1.5 text-xs font-semibold backdrop-blur hover:bg-orange-500 hover:border-orange-400 transition"
             >
               {name}
-            </motion.button>
+            </MotionLink>
           ))}
         </div>
       </motion.div>
@@ -1037,15 +1044,16 @@ const CatalogShortcuts = ({ onSelectCategory, onBrowse, onOpenChat }: {
           {otherCategories.map((name) => {
             const Icon = CATEGORY_ICONS[name] || DEFAULT_ICON;
             return (
-              <motion.button
+              <MotionLink
                 key={name}
+                to={categoryHref(name)}
                 whileTap={{ scale: 0.96 }}
-                onClick={() => onSelectCategory(name)}
+                onClick={onNavigate}
                 className="flex items-center gap-1.5 rounded-full bg-white/10 border border-white/15 px-3.5 py-1.5 text-xs font-semibold backdrop-blur hover:bg-purple-600 hover:border-purple-400 transition"
               >
                 <Icon className="h-3.5 w-3.5 text-purple-200" />
                 {name}
-              </motion.button>
+              </MotionLink>
             );
           })}
         </div>
@@ -1111,16 +1119,17 @@ const CatalogShortcuts = ({ onSelectCategory, onBrowse, onOpenChat }: {
         </div>
         <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x md:grid md:grid-cols-6 md:overflow-visible md:mx-0 md:px-0 md:pb-0">
           {heroCategories.map((c) => (
-            <motion.button
+            <MotionLink
               key={c.name}
+              to={categoryHref(c.name)}
               whileHover={{ y: -4 }}
               whileTap={{ scale: 0.96 }}
-              onClick={() => onSelectCategory(c.name)}
+              onClick={onNavigate}
               className="snap-start shrink-0 w-32 md:w-auto flex flex-col items-center gap-2 rounded-2xl bg-white/10 border border-white/15 px-3 py-4 backdrop-blur hover:bg-white/20 hover:border-orange-300/50 transition text-center"
             >
               <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-orange-300">{c.icon}</span>
               <span className="text-xs font-bold leading-tight">{c.name}</span>
-            </motion.button>
+            </MotionLink>
           ))}
         </div>
       </div>
@@ -1199,36 +1208,34 @@ const carFromCompatibility = (compatibility?: string): string =>
 
 // Схожі товари під те саме авто. Шукаємо по compatibility, а не по категорії:
 // покупцю з Peugeot Partner потрібне інше на його авто, а не інші бризковики.
-const SimilarProducts = ({ product, onOpen }: { product: Product; onOpen: (id: number) => void }) => {
+// Товар без авто (автохімія, аромати) — схожі з тієї ж категорії. Блок також
+// дає Google посилання між картками: без нього товари — сироти з sitemap.
+const SimilarProducts = ({ product }: { product: Product }) => {
   const [items, setItems] = useState<Product[]>([]);
   const car = carFromCompatibility(product.compatibility);
 
   useEffect(() => {
-    if (!car) return;   // без авто нічого не шукаємо; нижче рендер поверне null
+    if (!car && !product.category) return;
     let cancelled = false;
-    supabase.from('products')
-      .select(PRODUCT_CARD_FIELDS)
-      .ilike('compatibility', `%${car}%`)
+    let query = supabase.from('products').select(PRODUCT_CARD_FIELDS);
+    query = car ? query.ilike('compatibility', `%${car}%`) : query.eq('category', product.category);
+    query
       .neq('id', product.id)
       .not('available', 'is', false)
-      .limit(8)
+      .limit(12)
       .then(({ data }) => { if (!cancelled && data) setItems(data as unknown as Product[]); });
     return () => { cancelled = true; };
-  }, [car, product.id]);
+  }, [car, product.id, product.category]);
 
-  if (!car || items.length === 0) return null;
+  if (items.length === 0) return null;
   return (
     <section className="mt-6 bg-white border rounded-2xl p-4 sm:p-6">
       <h2 className="text-sm font-bold mb-4 flex items-center gap-2">
-        <CarFront className="w-4 h-4 text-purple-600" /> Схожі товари для {car}
+        <CarFront className="w-4 h-4 text-purple-600" /> {car ? `Схожі товари для ${car}` : 'Схожі товари'}
       </h2>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
         {items.map((p) => (
-          <a
-            key={p.id} href={`/product/${p.id}`}
-            onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); onOpen(p.id); }}
-            className="group no-underline text-inherit"
-          >
+          <Link key={p.id} to={`/product/${p.id}`} className="group no-underline text-inherit">
             <div className="aspect-square rounded-xl bg-slate-50 overflow-hidden">
               <img
                 src={thumbUrl(firstImg(p.images, p.category), 400)} alt={p.name}
@@ -1239,7 +1246,7 @@ const SimilarProducts = ({ product, onOpen }: { product: Product; onOpen: (id: n
             </div>
             <p className="mt-1.5 text-[11px] text-slate-700 line-clamp-2 leading-4 group-hover:text-purple-700">{p.name}</p>
             <p className="text-xs font-black text-slate-900">{p.price} ₴</p>
-          </a>
+          </Link>
         ))}
       </div>
     </section>
@@ -1306,9 +1313,11 @@ export default function App() {
   const setActiveProductId = (id: number | null) => {
     navigate(id == null ? '/' : `/product/${id}`);
   };
-  // «Назад до каталогу»: повертаємось на попередню сторінку (категорія, пошук),
-  // а якщо товар відкрили за прямим посиланням з реклами — на головну.
-  const goBack = () => (location.key === 'default' ? navigate('/') : navigate(-1));
+  // «Назад до каталогу»: повертаємось на попередню сторінку (категорія, пошук).
+  // Якщо товар відкрили за прямим посиланням — href веде в його категорію.
+  const goBack = (e: React.MouseEvent) => {
+    if (location.key !== 'default') { e.preventDefault(); navigate(-1); }
+  };
   const [linkCopied, setLinkCopied] = useState(false);
   const [quickOrderOpen, setQuickOrderOpen] = useState(false);
   // Індекс фото у повноекранному перегляді; null — перегляд закритий
@@ -1392,17 +1401,15 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
 
   // Підбір за авто їде разом з категорією — інакше вибір моделі губився
   // при переході в іншу категорію.
-  const openCategory = (
+  const catHref = (
     category: string,
     subcategory?: string | null,
     car: { mark: string; model: string } = { mark: carMark, model: carModel },
   ) => {
-    if (car.mark) {
-      return navigate(catalogPath([car.mark, car.model, category === 'Усі' ? '' : category, subcategory]));
-    }
-    if (category === 'Усі') return navigate('/catalog');
-    navigate(`/category/${categorySlug(category)}${subcategory ? `/${encodeURIComponent(subcategory)}` : ''}`);
+    if (car.mark) return catalogPath([car.mark, car.model, category === 'Усі' ? '' : category, subcategory]);
+    return categoryHref(category, subcategory);
   };
+  const openCategory = (...args: Parameters<typeof catHref>) => navigate(catHref(...args));
   // Зміна авто у шапці каталогу — той самий перехід, лише з іншим авто
   const setCarFilter = (mark: string, model: string) =>
     openCategory(selectedCategory, selectedSubcategory, { mark, model });
@@ -1719,15 +1726,12 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
   // Логотип і «Головна» в хлібних крихтах — повне повернення на головну.
   // Скидаємо і підбір за авто (він у query): інакше фільтр лишався активним
   // і замість головної далі показувався каталог.
-  const goHome = () => {
-    setSearchQuery('');
-    navigate('/');
-  };
+  const goHome = () => setSearchQuery('');
 
-  // Выбор категории/подкатегории з мега-меню каталогу
-  const handleCatalogMenuSelect = (category: string, subcategory?: string) => {
+  // Після переходу в категорію (мега-меню, швидкі посилання) — сам перехід
+  // робить <Link>, тут лише очищення пошуку і скрол до списку
+  const afterCatalogNav = () => {
     setSearchQuery('');
-    openCategory(category, subcategory);
     requestAnimationFrame(() => {
       document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -1990,10 +1994,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
         <div className="mx-auto max-w-7xl px-3 py-2.5 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4 sm:py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 sm:gap-3">
-              <motion.div onClick={goHome} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none" whileHover={{ scale: 1.02 }}>
+              <MotionLink to="/" onClick={goHome} className="text-xl font-black text-purple-700 cursor-pointer tracking-tighter shrink-0 select-none no-underline" whileHover={{ scale: 1.02 }}>
                 AUTO<span className="text-orange-500">SHOP</span>
-              </motion.div>
-              <CatalogMegaMenu onSelect={handleCatalogMenuSelect} open={isCatalogMenuOpen} onOpenChange={setIsCatalogMenuOpen} />
+              </MotionLink>
+              <CatalogMegaMenu hrefFor={(c, sub) => catHref(c, sub)} onSelect={afterCatalogNav} open={isCatalogMenuOpen} onOpenChange={setIsCatalogMenuOpen} />
             </div>
             <div className="flex items-center gap-2 sm:hidden shrink-0">
               {isAdminMode && (
@@ -2041,11 +2045,11 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   <>
                     <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100">
                       {products.slice(0, 8).map(p => (
-                        <button
+                        <Link
                           key={p.id}
-                          type="button"
-                          onClick={() => { setActiveProductId(p.id); setIsSearchDropdownOpen(false); }}
-                          className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-purple-50 transition-colors"
+                          to={`/product/${p.id}`}
+                          onClick={() => setIsSearchDropdownOpen(false)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-purple-50 transition-colors no-underline"
                         >
                           <img src={p.images?.[0] ? thumbUrl(p.images[0], 100) : undefined} alt={p.name} width={44} height={44} loading="lazy" decoding="async" className="w-11 h-11 rounded-lg object-cover bg-slate-100 shrink-0" />
                           <span className="flex-1 min-w-0">
@@ -2060,23 +2064,22 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                             {p.old_price && <span className="block text-[11px] text-slate-400 line-through">{p.old_price} ₴</span>}
                             <span className="text-sm font-bold text-purple-700">{p.price} ₴</span>
                           </span>
-                        </button>
+                        </Link>
                       ))}
                     </div>
                     {totalCount > 8 && (
-                      <button
-                        type="button"
+                      <Link
+                        to={`/search?q=${encodeURIComponent(searchQuery.trim())}`}
                         onClick={() => {
                           setIsSearchDropdownOpen(false);
-                          navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
                           requestAnimationFrame(() => {
                             document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                           });
                         }}
-                        className="w-full px-4 py-2.5 text-sm font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors"
+                        className="block w-full text-center px-4 py-2.5 text-sm font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors no-underline"
                       >
                         Показати всі результати ({totalCount})
-                      </button>
+                      </Link>
                     )}
                   </>
                 )}
@@ -2243,12 +2246,12 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   ))}
                 </select>
                 {carMark && (
-                  <button
-                    onClick={() => setCarFilter('', '')}
-                    className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-red-500 transition-colors"
+                  <Link
+                    to={catHref(selectedCategory, selectedSubcategory, { mark: '', model: '' })}
+                    className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-red-500 transition-colors no-underline"
                   >
                     <X className="h-3.5 w-3.5" /> Скинути
-                  </button>
+                  </Link>
                 )}
               </div>
             </div>
@@ -2258,12 +2261,13 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           {showProducts && (
           <div id="categories" className="bg-white border-b shadow-sm scroll-mt-20">
             <div className="mx-auto max-w-7xl px-3 sm:px-4 py-3 flex flex-wrap items-center gap-1.5 text-sm">
-              <button
+              <Link
+                to="/"
                 onClick={goHome}
-                className="text-slate-500 hover:text-purple-700 transition-colors font-medium"
+                className="text-slate-500 hover:text-purple-700 transition-colors font-medium no-underline"
               >
                 Головна
-              </button>
+              </Link>
               {isSearching ? (
                 <>
                   <span className="text-slate-300">→</span>
@@ -2275,12 +2279,12 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   <span className="text-slate-300">→</span>
                   {selectedSubcategory ? (
                     <>
-                      <button
-                        onClick={() => openCategory(selectedCategory)}
-                        className="text-slate-500 hover:text-purple-700 transition-colors font-medium"
+                      <Link
+                        to={catHref(selectedCategory)}
+                        className="text-slate-500 hover:text-purple-700 transition-colors font-medium no-underline"
                       >
                         {selectedCategory}
-                      </button>
+                      </Link>
                       <span className="text-slate-300">→</span>
                       <span className="font-semibold text-slate-800">{selectedSubcategory}</span>
                     </>
@@ -2295,6 +2299,20 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                 </>
               )}
             </div>
+            {!isSearching && (catalogTree[selectedCategory]?.length ?? 0) > 0 && (
+              <nav aria-label="Підкатегорії" className="mx-auto max-w-7xl px-3 sm:px-4 pb-3 flex gap-1.5 overflow-x-auto text-xs">
+                {catalogTree[selectedCategory].map((sub) => (
+                  <Link
+                    key={sub}
+                    to={catHref(selectedCategory, sub)}
+                    aria-current={sub === selectedSubcategory ? 'page' : undefined}
+                    className={`shrink-0 rounded-full border px-3 py-1 no-underline transition ${sub === selectedSubcategory ? 'bg-purple-600 border-purple-600 text-white' : 'bg-white text-slate-600 hover:border-purple-300 hover:text-purple-700'}`}
+                  >
+                    {sub}
+                  </Link>
+                ))}
+              </nav>
+            )}
           </div>
           )}
 
@@ -2303,9 +2321,9 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             {!showProducts && (
               <>
                 <TrustBadges />
-                <HomeShowcase onOpen={(id) => setActiveProductId(id)} onAdd={addToCart} />
+                <HomeShowcase onAdd={addToCart} />
                 <CatalogShortcuts
-                  onSelectCategory={(cat) => handleCatalogMenuSelect(cat)}
+                  onNavigate={afterCatalogNav}
                   onBrowse={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); setIsCatalogMenuOpen(true); }}
                   onOpenChat={() => window.dispatchEvent(new Event('open-chat-widget'))}
                 />
@@ -2334,7 +2352,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                     Написати у чат
                   </button>
                 </div>
-                <HomeShowcase onOpen={(id) => setActiveProductId(id)} onAdd={addToCart} />
+                <HomeShowcase onAdd={addToCart} />
               </motion.div>
             ) : (
               <motion.div layout className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
@@ -2343,14 +2361,9 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                     // Картка — справжнє посилання: інакше на товар не веде жоден
                     // <a>, і для Google усі 58 тис. карток — сироти з sitemap.
                     // Заодно працює «відкрити в новій вкладці».
-                    <motion.a
+                    <MotionLink
                       key={product.id}
-                      href={`/product/${product.id}`}
-                      onClick={(e) => {
-                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-                        e.preventDefault();
-                        setActiveProductId(product.id);
-                      }}
+                      to={`/product/${product.id}`}
                       custom={i}
                       initial="hidden"
                       animate="visible"
@@ -2409,7 +2422,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                           </motion.button>
                         </div>
                       </div>
-                    </motion.a>
+                    </MotionLink>
                   ))}
                 </AnimatePresence>
               </motion.div>
@@ -2544,7 +2557,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             {!showProducts && (
               <>
                 <HowWeWork />
-                <StoreReviews reviews={reviews} onOpenProduct={(id) => setActiveProductId(id)} />
+                <StoreReviews reviews={reviews} />
                 <FAQSection />
               </>
             )}
@@ -2552,84 +2565,20 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             {/* Info Tabs — внизу, під текстом опису */}
             <InfoTabs />
 
-            {/* Footer */}
-            <footer className="mt-10 border-t pt-8 pb-8">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
-                <div>
-                  <span className="text-lg font-black text-purple-700">AUTO<span className="text-orange-500">SHOP</span></span>
-                  <p className="mt-2 text-xs text-slate-500 leading-5">
-                    Інтернет-магазин автоаксесуарів і тюнінгу з модельним підбором під конкретне авто.
-                    Понад 65 000 товарів у 24 категоріях з доставкою по всій Україні.
-                  </p>
-                  <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Гарантія та повернення 14 днів
-                  </div>
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Покупцям</h4>
-                  <ul className="space-y-2 text-xs text-slate-600">
-                    <li>Доставка «Новою Поштою» та «Укрпоштою»</li>
-                    <li>Оплата при отриманні — готівка або картка</li>
-                    <li>Безкоштовна доставка від 2 000 ₴</li>
-                    <li>Обмін та повернення протягом 14 днів</li>
-                    <li>Перевірка товару перед оплатою</li>
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Графік роботи</h4>
-                  <ul className="space-y-2 text-xs text-slate-600">
-                    <li className="flex justify-between max-w-[200px]"><span>Пн - Пт</span><span className="font-semibold">08:00 - 21:00</span></li>
-                    <li className="flex justify-between max-w-[200px]"><span>Субота</span><span className="font-semibold">09:00 - 19:00</span></li>
-                    <li className="flex justify-between max-w-[200px]"><span>Неділя</span><span className="font-semibold">09:00 - 18:00</span></li>
-                    <li className="text-[11px] text-slate-400 pt-1">Відправлення замовлень: Пн - Сб</li>
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Контакти</h4>
-                  <ul className="space-y-2.5 text-xs">
-                    <li>
-                      <a href="tel:0976020714" className="flex items-center gap-2 text-slate-700 hover:text-purple-600 transition font-bold">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><Phone className="w-3.5 h-3.5" /></span>
-                        097-602-0714
-                      </a>
-                    </li>
-                    <li>
-                      <a href="mailto:dneprogorb777@gmail.com" className="flex items-center gap-2 text-slate-600 hover:text-purple-600 transition break-all">
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><Mail className="w-3.5 h-3.5" /></span>
-                        dneprogorb777@gmail.com
-                      </a>
-                    </li>
-                    <li>
-                      <button onClick={() => window.dispatchEvent(new Event('open-chat-widget'))} className="flex items-center gap-2 text-slate-600 hover:text-purple-600 transition">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><MessageCircle className="w-3.5 h-3.5" /></span>
-                        Онлайн-чат на сайті
-                      </button>
-                    </li>
-                    <li className="flex items-center gap-2 text-slate-600">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><MapPin className="w-3.5 h-3.5" /></span>
-                      м. Дніпро, Україна
-                    </li>
-                  </ul>
-                </div>
-              </div>
-              <div className="mt-8 border-t pt-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-                <p className="text-[10px] text-slate-400">© 2025 AUTOSHOP-MARKET. Всі права захищені.</p>
-                <p className="text-[10px] text-slate-400">Ціни на сайті вказані в гривнях з урахуванням усіх знижок.</p>
-              </div>
-            </footer>
           </main>
         </>
       ) : (
         /* Product Detail Page */
         <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
-          <motion.button
+          <MotionLink
+            to={currentProduct.category ? categoryHref(currentProduct.category) : '/'}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             onClick={goBack}
-            className="flex items-center gap-2 text-xs font-semibold text-slate-600 bg-white border px-4 py-2 rounded-xl mb-6 hover:shadow-md transition"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 bg-white border px-4 py-2 rounded-xl mb-6 hover:shadow-md transition no-underline"
           >
             <ArrowLeft className="h-4 w-4" /> Назад до каталогу
-          </motion.button>
+          </MotionLink>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 bg-white border rounded-2xl p-3 sm:p-6 shadow-sm">
             <div className="lg:col-span-7 flex flex-col gap-3">
@@ -2704,7 +2653,19 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             </div>
 
             <div className="lg:col-span-5 flex flex-col lg:pl-6">
-              <span className="inline-block self-start bg-purple-50 text-purple-700 text-[10px] font-bold px-3 py-1 rounded-full mb-2">{currentProduct.category}</span>
+              <nav aria-label="Хлібні крихти" className="mb-2 flex flex-wrap items-center gap-1 text-[11px] text-slate-500">
+                <Link to="/" className="hover:text-purple-700 no-underline">Головна</Link>
+                {currentProduct.category && <>
+                  <span className="text-slate-300">→</span>
+                  <Link to={categoryHref(currentProduct.category)} className="font-bold text-purple-700 hover:underline">{currentProduct.category}</Link>
+                </>}
+                {currentProduct.category && currentProduct.subcategory && <>
+                  <span className="text-slate-300">→</span>
+                  <Link to={categoryHref(currentProduct.category, currentProduct.subcategory)} className="hover:text-purple-700 no-underline">{currentProduct.subcategory}</Link>
+                </>}
+                <span className="text-slate-300">→</span>
+                <span className="line-clamp-1 text-slate-400">{currentProduct.name}</span>
+              </nav>
               <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">{currentProduct.name}</h1>
 
               {/* Наявність — з поля available у базі, а не «поки хардкодом»:
@@ -2887,7 +2848,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             </motion.div>
           </div>
 
-          <SimilarProducts product={currentProduct} onOpen={(id) => setActiveProductId(id)} />
+          <SimilarProducts product={currentProduct} />
 
           {lightboxIndex !== null && (currentProduct.images?.length || 0) > 0 && (
             <Lightbox
@@ -2900,6 +2861,86 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
           )}
         </main>
       )}
+
+      <div className="mx-auto max-w-7xl px-3 sm:px-4">
+            {/* Footer */}
+            <footer className="mt-10 border-t pt-8 pb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
+                <div>
+                  <span className="text-lg font-black text-purple-700">AUTO<span className="text-orange-500">SHOP</span></span>
+                  <p className="mt-2 text-xs text-slate-500 leading-5">
+                    Інтернет-магазин автоаксесуарів і тюнінгу з модельним підбором під конкретне авто.
+                    Понад 65 000 товарів у 24 категоріях з доставкою по всій Україні.
+                  </p>
+                  <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> Гарантія та повернення 14 днів
+                  </div>
+                </div>
+                {/* Усі категорії звичайними посиланнями на кожній сторінці —
+                    шлях для Googlebot у глибину каталогу */}
+                <nav aria-label="Категорії каталогу" className="sm:col-span-2 lg:col-span-4 lg:order-last">
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Категорії</h4>
+                  <ul className="columns-2 sm:columns-3 lg:columns-5 gap-x-6 text-xs text-slate-600">
+                    {[...otherCategories, ...chemistryCategories].map((c) => (
+                      <li key={c} className="mb-2 break-inside-avoid">
+                        <Link to={categoryHref(c)} className="hover:text-purple-600 transition no-underline">{c}</Link>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Покупцям</h4>
+                  <ul className="space-y-2 text-xs text-slate-600">
+                    <li>Доставка «Новою Поштою» та «Укрпоштою»</li>
+                    <li>Оплата при отриманні — готівка або картка</li>
+                    <li>Безкоштовна доставка від 2 000 ₴</li>
+                    <li>Обмін та повернення протягом 14 днів</li>
+                    <li>Перевірка товару перед оплатою</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Графік роботи</h4>
+                  <ul className="space-y-2 text-xs text-slate-600">
+                    <li className="flex justify-between max-w-[200px]"><span>Пн - Пт</span><span className="font-semibold">08:00 - 21:00</span></li>
+                    <li className="flex justify-between max-w-[200px]"><span>Субота</span><span className="font-semibold">09:00 - 19:00</span></li>
+                    <li className="flex justify-between max-w-[200px]"><span>Неділя</span><span className="font-semibold">09:00 - 18:00</span></li>
+                    <li className="text-[11px] text-slate-400 pt-1">Відправлення замовлень: Пн - Сб</li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mb-3">Контакти</h4>
+                  <ul className="space-y-2.5 text-xs">
+                    <li>
+                      <a href="tel:0976020714" className="flex items-center gap-2 text-slate-700 hover:text-purple-600 transition font-bold">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><Phone className="w-3.5 h-3.5" /></span>
+                        097-602-0714
+                      </a>
+                    </li>
+                    <li>
+                      <a href="mailto:dneprogorb777@gmail.com" className="flex items-center gap-2 text-slate-600 hover:text-purple-600 transition break-all">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><Mail className="w-3.5 h-3.5" /></span>
+                        dneprogorb777@gmail.com
+                      </a>
+                    </li>
+                    <li>
+                      <button onClick={() => window.dispatchEvent(new Event('open-chat-widget'))} className="flex items-center gap-2 text-slate-600 hover:text-purple-600 transition">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><MessageCircle className="w-3.5 h-3.5" /></span>
+                        Онлайн-чат на сайті
+                      </button>
+                    </li>
+                    <li className="flex items-center gap-2 text-slate-600">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600"><MapPin className="w-3.5 h-3.5" /></span>
+                      м. Дніпро, Україна
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              <div className="mt-8 border-t pt-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+                <p className="text-[10px] text-slate-400">© 2025 AUTOSHOP-MARKET. Всі права захищені.</p>
+                <p className="text-[10px] text-slate-400">Ціни на сайті вказані в гривнях з урахуванням усіх знижок.</p>
+              </div>
+            </footer>
+      </div>
 
       {/* Cart Drawer */}
       <AnimatePresence>

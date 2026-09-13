@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router';
 import {
   LayoutGrid, ChevronRight, X,
   Lightbulb, CircleDot, SunMedium, SprayCan, Armchair, PackagePlus,
@@ -45,12 +46,14 @@ const CHEMISTRY_SUBCATEGORIES = [
 const CHEMISTRY_SUB_SET = new Set(CHEMISTRY_SUBCATEGORIES);
 
 interface CatalogMegaMenuProps {
-  onSelect: (category: string, subcategory?: string) => void;
+  // Адреса пункту — справжній href; onSelect лише побічні дії (скрол тощо)
+  hrefFor: (category: string, subcategory?: string) => string;
+  onSelect: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }
 
-export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ onSelect, open: openProp, onOpenChange }) => {
+export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ hrefFor, onSelect, open: openProp, onOpenChange }) => {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
   const setOpen = (next: boolean | ((o: boolean) => boolean)) => {
@@ -88,8 +91,8 @@ export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ onSelect, open
     else document.body.style.overflow = '';
   }, [open]);
 
-  const pick = (category: string, subcategory?: string) => {
-    onSelect(category, subcategory);
+  const pick = () => {
+    onSelect();
     setOpen(false);
   };
 
@@ -135,11 +138,13 @@ export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ onSelect, open
                   const Icon = CATEGORY_ICONS[name] || DEFAULT_ICON;
                   const isActive = active === name;
                   return (
-                    <button
+                    <Link
                       key={name}
+                      to={hrefFor(name)}
                       onMouseEnter={() => setHovered(name)}
                       onFocus={() => setHovered(name)}
-                      onClick={() => (hovered === name ? pick(name) : setHovered(name))}
+                      // Перший дотик на телефоні лише розкриває підкатегорії
+                      onClick={(e) => { if (hovered === name) pick(); else { e.preventDefault(); setHovered(name); } }}
                       className={`relative flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[11.5px] font-semibold leading-tight transition-colors sm:px-4 sm:text-xs ${
                         isActive ? 'bg-white text-purple-700' : 'text-slate-600 hover:bg-white/80 hover:text-purple-700'
                       }`}
@@ -155,7 +160,7 @@ export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ onSelect, open
                         <span className="truncate">{name}</span>
                       </span>
                       <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${isActive ? 'translate-x-0.5 text-orange-500' : 'text-slate-300'}`} />
-                    </button>
+                    </Link>
                   );
                 })}
               </div>
@@ -177,24 +182,26 @@ export const CatalogMegaMenu: React.FC<CatalogMegaMenuProps> = ({ onSelect, open
                         </div>
                         <h3 className="truncate text-sm font-black leading-tight text-slate-900 sm:text-base">{active}</h3>
                       </div>
-                      <button
-                        onClick={() => pick(active)}
+                      <Link
+                        to={hrefFor(active)}
+                        onClick={pick}
                         className="flex shrink-0 items-center gap-1 rounded-full bg-purple-50 px-3 py-1.5 text-[11px] font-bold text-purple-700 transition-colors hover:bg-purple-100"
                       >
                         Всі товари <ChevronRight className="h-3 w-3" />
-                      </button>
+                      </Link>
                     </div>
                     {subcats.length > 0 ? (
                       <div className="columns-1 gap-x-5 sm:columns-2 lg:columns-3">
                         {subcats.map((sub) => (
-                          <button
+                          <Link
                             key={sub}
-                            onClick={() => (CHEMISTRY_SUB_SET.has(sub) ? pick(sub) : pick(active, sub))}
+                            to={CHEMISTRY_SUB_SET.has(sub) ? hrefFor(sub) : hrefFor(active, sub)}
+                            onClick={pick}
                             title={sub}
                             className="block w-full break-inside-avoid-column truncate rounded-lg px-2 py-1.5 text-left text-xs text-slate-600 transition-colors hover:bg-purple-50 hover:text-purple-700"
                           >
                             {sub}
-                          </button>
+                          </Link>
                         ))}
                       </div>
                     ) : (

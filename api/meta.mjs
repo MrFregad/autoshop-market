@@ -83,9 +83,8 @@ export function injectMeta(shell, { title, description, canonical, image, jsonLd
     html = html.replace('</head>', `  <script type="application/ld+json">${safe}</script>\n  </head>`);
   }
 
-  // В оболонці #root не порожній (там статичні посилання на категорії для
-  // краулера), тому міняємо весь блок, а не порожній тег. Усередині блоку
-  // немає вкладених <div>, тож лінива крапка доходить рівно до його кінця.
+  // Міняємо весь блок #root, а не лише порожній тег — на випадок, якщо в
+  // оболонці там щось з'явиться (без вкладених <div>).
   if (body) html = html.replace(/<div id="root">[\s\S]*?<\/div>/, `<div id="root">${body}</div>`);
 
   return html;
