@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Фото товару незабаром">
+  <rect width="400" height="400" fill="#f1f5f9"/>
+  <g fill="none" stroke="#cbd5e1" stroke-width="10" stroke-linejoin="round" transform="translate(150 110)">
+    <path d="M50 5 95 28v52L50 103 5 80V28z"/>
+    <path d="M5 28l45 23 45-23M50 51v52"/>
+  </g>
+  <text x="200" y="270" text-anchor="middle" font-family="system-ui,-apple-system,Segoe UI,Arial,sans-serif" font-size="40" font-weight="900" letter-spacing="-1.5" fill="#7e22ce">AUTO<tspan fill="#f97316">SHOP</tspan></text>
+  <text x="200" y="305" text-anchor="middle" font-family="system-ui,-apple-system,Segoe UI,Arial,sans-serif" font-size="17" fill="#94a3b8">Фото незабаром</text>
+</svg>

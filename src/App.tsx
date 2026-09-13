@@ -76,40 +76,25 @@ interface CategoryItem {
   subtitle: string;
 }
 
-// ─── Image Fallbacks by Category ────────────────────────────
-const CATEGORY_FALLBACKS: Record<string, string> = {
-  'Інвертори':                      'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=400&auto=format&fit=crop&q=70',
-  'Автоакустика':                   'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=400&auto=format&fit=crop&q=70',
-  'Автомагнітоли':                  'https://images.unsplash.com/photo-1489686995744-f47e995ffe61?w=400&auto=format&fit=crop&q=70',
-  'Автомобільне світло':            'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?w=400&auto=format&fit=crop&q=70',
-  'Автомобільний зарядний пристрій':'https://images.unsplash.com/photo-1542362567-b07e54358753?w=400&auto=format&fit=crop&q=70',
-  'Аксесуари':                      'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&auto=format&fit=crop&q=70',
-  'Автохімія':                      'https://images.unsplash.com/photo-1607860108855-64acf2078ed9?w=400&auto=format&fit=crop&q=70',
-  'Відеореєстратори':               'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=400&auto=format&fit=crop&q=70',
-  'Компресор':                      'https://images.unsplash.com/photo-1487754180451-c456f719a1fc?w=400&auto=format&fit=crop&q=70',
-  'Монітори та камери заднього виду':'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?w=400&auto=format&fit=crop&q=70',
-  'Навігатори':                     'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=400&auto=format&fit=crop&q=70',
-  'Перетворювачі':                  'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&auto=format&fit=crop&q=70',
-  'Пускозарядні':                   'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?w=400&auto=format&fit=crop&q=70',
-  'Трансмітери':                    'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&auto=format&fit=crop&q=70',
-  'Тримачі, розгалужувачі':         'https://images.unsplash.com/photo-1517026575980-3e1e2dedeab4?w=400&auto=format&fit=crop&q=70',
-};
-const DEFAULT_FALLBACK = 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=400&auto=format&fit=crop&q=70';
+// ─── Заглушка фото ──────────────────────────────────────────
+// Раніше замість відсутнього фото ставилось стокове фото з Unsplash (чорна
+// машина на картці автопарфуму). Тепер — нейтральна заглушка з логотипом.
+const PLACEHOLDER_IMG = '/placeholder-product.svg';
 
-// Returns a category-appropriate fallback image URL
-const getFallbackImage = (category?: string): string =>
-  (category && CATEGORY_FALLBACKS[category]) || DEFAULT_FALLBACK;
-
-// onError handler for <img> — swaps src to fallback once, prevents loop
-const imgError = (category?: string) => (e: React.SyntheticEvent<HTMLImageElement>) => {
+// Фото не завантажилось: спершу пробуємо оригінал напряму (якщо ліг проксі
+// wsrv.nl), і лише потім заглушка.
+// Рендерер Googlebot картинки не качає — у нього спрацьовує onError, і в
+// індекс потрапляла заглушка замість фото товару. Ботам src не чіпаємо.
+const IS_BOT = typeof navigator !== 'undefined' && /bot|crawl|spider|lighthouse/i.test(navigator.userAgent);
+const imgError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  if (IS_BOT) return;
   const img = e.currentTarget;
-  img.onerror = null;
-  img.src = getFallbackImage(category);
+  const original = new URL(img.src).searchParams.get('url');
+  if (img.src.includes('wsrv.nl') && original) img.src = original;
+  else if (!img.src.endsWith(PLACEHOLDER_IMG)) img.src = PLACEHOLDER_IMG;
 };
 
-// Safe first image URL — returns fallback if array is empty/undefined
-const firstImg = (images: string[] | undefined, category?: string): string =>
-  images?.[0] || getFallbackImage(category);
+const firstImg = (images: string[] | undefined): string => images?.[0] || PLACEHOLDER_IMG;
 
 // Зменшена версія зображення для превʼю (сітка каталогу, кошик, мініатюри).
 // У картинок з CDN Prom.ua розмір зашитий прямо в URL токеном _wXXX_hXXX_ —
@@ -120,7 +105,7 @@ const firstImg = (images: string[] | undefined, category?: string): string =>
 const thumbUrl = (url: string, size = 400): string => {
   if (!url) return url;
   if (/_w\d+_h\d+_/.test(url)) return url.replace(/_w\d+_h\d+_/, `_w${size}_h${size}_`);
-  if (url.includes('images.unsplash.com') || url.includes('wsrv.nl')) return url;
+  if (url.startsWith('/') || url.includes('images.unsplash.com') || url.includes('wsrv.nl')) return url;
   return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=${size}&output=webp&q=75`;
 };
 
@@ -277,14 +262,14 @@ const ShowcaseRow = ({ title, icon, items, onAdd }: {
             <DiscountBadge oldPrice={p.old_price} price={p.price} />
             <div className="aspect-square w-full overflow-hidden rounded-xl bg-slate-50">
               <img
-                src={thumbUrl(firstImg(p.images, p.category), 400)}
+                src={thumbUrl(firstImg(p.images), 400)}
                 alt={p.name}
                 width={400}
                 height={400}
                 loading="lazy"
                 decoding="async"
                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                onError={imgError(p.category)}
+                onError={imgError}
               />
             </div>
             <div className="mt-2 flex flex-col flex-grow justify-between">
@@ -1238,10 +1223,10 @@ const SimilarProducts = ({ product }: { product: Product }) => {
           <Link key={p.id} to={`/product/${p.id}`} className="group no-underline text-inherit">
             <div className="aspect-square rounded-xl bg-slate-50 overflow-hidden">
               <img
-                src={thumbUrl(firstImg(p.images, p.category), 400)} alt={p.name}
+                src={thumbUrl(firstImg(p.images), 400)} alt={p.name}
                 width={400} height={400} loading="lazy" decoding="async"
                 className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                onError={imgError(p.category)}
+                onError={imgError}
               />
             </div>
             <p className="mt-1.5 text-[11px] text-slate-700 line-clamp-2 leading-4 group-hover:text-purple-700">{p.name}</p>
@@ -1255,8 +1240,8 @@ const SimilarProducts = ({ product }: { product: Product }) => {
 
 // Повноекранний перегляд фото. Раніше фото не збільшувалось узагалі —
 // на картинці 400px не роздивитись ні кріплення, ні фактуру.
-const Lightbox = ({ images, index, category, onClose, onIndex }: {
-  images: string[]; index: number; category: string; onClose: () => void; onIndex: (i: number) => void;
+const Lightbox = ({ images, index, onClose, onIndex }: {
+  images: string[]; index: number; onClose: () => void; onIndex: (i: number) => void;
 }) => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1291,7 +1276,7 @@ const Lightbox = ({ images, index, category, onClose, onIndex }: {
         src={thumbUrl(images[index], 1200)} alt=""
         onClick={(e) => e.stopPropagation()}
         className="max-h-[85dvh] max-w-full object-contain"
-        onError={imgError(category)}
+        onError={imgError}
       />
       <span className="absolute bottom-5 text-xs font-semibold text-white/80">{index + 1} / {images.length}</span>
     </div>
@@ -1330,9 +1315,9 @@ const activeProduct = products.find(p => p.id === activeProductId) ||
                       null;
 useProductStructuredData(activeProduct);
 
-const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
-  activeProduct?.images?.[0] || ''
-);
+// Вибране фото галереї. Головний кадр береться з фото саме цього товару —
+// інакше при переході між товарами лишалось фото попереднього.
+const [selectedReviewImage, setSelectedReviewImage] = useState('');
   // Що показувати — цілком визначається адресою: сторінка, підбір за авто,
   // категорія і пошуковий запит. Раніше частина цього жила в стані, тож
   // перезавантаження, «назад» чи надіслане посилання скидали все на головну,
@@ -1597,17 +1582,6 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     if (!error && data) setReviews(data);
   };
 
-  useEffect(() => {
-    if (activeProductId) {
-      // Товар може прийти зі списку каталогу АБО окремим запитом (пряме посилання)
-      const current = products.find(p => p.id === activeProductId)
-        || (directProduct?.id === activeProductId ? directProduct : null);
-      if (current && current.images && current.images.length > 0) {
-        setSelectedReviewImage(current.images[0]);
-      }
-    }
-  }, [activeProductId, products, directProduct]);
-
   // Прокрутка вверх при смене товара (в т.ч. при заходе по прямой ссылке).
   // Форму «в 1 клік» і перегляд фото скидаємо тут же: інакше при переході
   // на сусідній товар відкритий лайтбокс показав би фото попереднього.
@@ -1816,6 +1790,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
     document.querySelector('link[rel="canonical"]')?.setAttribute('href', href);
   }, [currentProduct, isSearching, searchQuery, carMark, carModel, selectedCategory,
       selectedSubcategory, isCatalogPath, currentPage]);
+
+  const mainImage = currentProduct?.images?.includes(selectedReviewImage)
+    ? selectedReviewImage
+    : firstImg(currentProduct?.images);
 
   const currentProductReviews = useMemo(() => reviews.filter(r => r.product_id === activeProductId), [reviews, activeProductId]);
   // Рейтинг рахуємо з реальних відгуків. Немає відгуків — немає й зірок.
@@ -2384,7 +2362,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                       <ProductBadge type={product.badge} />
 
                       <div className="aspect-square w-full overflow-hidden rounded-xl bg-slate-50 flex items-center justify-center relative">
-                        <img src={thumbUrl(firstImg(product.images, product.category), 400)} alt={product.name} width={400} height={400} loading={i < 6 ? 'eager' : 'lazy'} decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" onError={imgError(product.category)} />
+                        <img src={thumbUrl(firstImg(product.images), 400)} alt={product.name} width={400} height={400} loading={i < 6 ? 'eager' : 'lazy'} decoding="async" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" onError={imgError} />
                         <motion.div
                           initial={{ opacity: 0 }}
                           whileHover={{ opacity: 1 }}
@@ -2592,10 +2570,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                     const el = e.currentTarget;
                     const i = Math.round(el.scrollLeft / el.clientWidth);
                     const img = (currentProduct.images || [])[i];
-                    if (img && img !== selectedReviewImage) setSelectedReviewImage(img);
+                    if (img && img !== mainImage) setSelectedReviewImage(img);
                   }}
                 >
-                  {(currentProduct.images?.length ? currentProduct.images : [firstImg(currentProduct.images, currentProduct.category)]).map((img, index) => (
+                  {(currentProduct.images?.length ? currentProduct.images : [firstImg(currentProduct.images)]).map((img, index) => (
                     <button
                       key={index}
                       onClick={() => setLightboxIndex(index)}
@@ -2608,7 +2586,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                         src={thumbUrl(img, 800)} alt={currentProduct.name}
                         width={800} height={800} loading={index === 0 ? 'eager' : 'lazy'} decoding="async"
                         className="h-full w-full object-contain"
-                        onError={imgError(currentProduct.category)}
+                        onError={imgError}
                       />
                     </button>
                   ))}
@@ -2627,23 +2605,23 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                     <button
                       key={index}
                       onClick={() => setSelectedReviewImage(img)}
-                      className={`w-14 h-14 border-2 rounded-xl p-0.5 transition hover:scale-105 ${selectedReviewImage === img ? 'border-purple-600' : 'border-slate-200'}`}
+                      className={`w-14 h-14 border-2 rounded-xl p-0.5 transition hover:scale-105 ${mainImage === img ? 'border-purple-600' : 'border-slate-200'}`}
                     >
-                      <img src={thumbUrl(img, 150)} alt="" width={56} height={56} loading="lazy" decoding="async" className="w-full h-full object-cover rounded-lg" onError={imgError(currentProduct.category)} />
+                      <img src={thumbUrl(img, 150)} alt="" width={56} height={56} loading="lazy" decoding="async" className="w-full h-full object-cover rounded-lg" onError={imgError} />
                     </button>
                   ))}
                 </div>
                 <button
-                  onClick={() => setLightboxIndex(Math.max(0, (currentProduct.images || []).indexOf(selectedReviewImage || '')))}
+                  onClick={() => setLightboxIndex(Math.max(0, (currentProduct.images || []).indexOf(mainImage)))}
                   aria-label="Відкрити фото на весь екран"
                   className="flex-1 aspect-square bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center max-h-[460px] relative group cursor-zoom-in"
                 >
                   {currentProduct.badge && <div className="absolute top-3 left-3 z-10"><ProductBadge type={currentProduct.badge} /></div>}
                   <DiscountBadge oldPrice={currentProduct.old_price} price={currentProduct.price} />
                   <img
-                    src={thumbUrl(selectedReviewImage || firstImg(currentProduct.images, currentProduct.category), 800)}
+                    src={thumbUrl(mainImage, 800)}
                     alt={currentProduct.name} className="w-full h-full object-contain"
-                    onError={imgError(currentProduct.category)}
+                    onError={imgError}
                   />
                   <span className="absolute bottom-3 right-3 rounded-lg bg-slate-900/70 px-2.5 py-1 text-[11px] font-semibold text-white opacity-0 group-hover:opacity-100 transition">
                     Збільшити
@@ -2854,7 +2832,6 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
             <Lightbox
               images={currentProduct.images}
               index={Math.min(lightboxIndex, currentProduct.images.length - 1)}
-              category={currentProduct.category}
               onClose={() => setLightboxIndex(null)}
               onIndex={setLightboxIndex}
             />
@@ -2963,7 +2940,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState<string>(
                   <AnimatePresence>
                     {cart.map((item) => (
                       <motion.div key={item.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -100 }} className="flex gap-4 border-b pb-4">
-                        <img src={thumbUrl(firstImg(item.images, item.category), 150)} alt={item.name} width={64} height={64} loading="lazy" decoding="async" className="h-16 w-16 rounded-xl object-cover shadow-sm" onError={imgError(item.category)} />
+                        <img src={thumbUrl(firstImg(item.images), 150)} alt={item.name} width={64} height={64} loading="lazy" decoding="async" className="h-16 w-16 rounded-xl object-cover shadow-sm" onError={imgError} />
                         <div className="flex flex-1 flex-col justify-between">
                           <h4 className="text-xs font-medium text-slate-800 line-clamp-2">{item.name}</h4>
                           <div className="flex items-center justify-between mt-2">
