@@ -6,43 +6,36 @@
 // GitHub Actions комітить лише catalogTree.ts, тож зібрана там карта
 // викидалась разом із раннером.
 //
-// Стало: /sitemap.xml — індекс, /sitemap-N.xml — сторінки. Дані беруться
-// з бази в момент запиту й кешуються на CDN на добу. Карта завжди свіжа,
-// репозиторій не росте, від імпорту нічого не залежить.
+// Стало: /sitemap.xml — індекс, /sitemap-1.xml — головна, категорії й підбір
+// за авто (з бази в момент запиту, кеш на CDN на добу), /sitemap-2.xml —
+// відібрані товари.
 //
-// Маршрутизація — у vercel.json. Файл самодостатній (без локальних
-// імпортів) — вимога стабільної роботи на Vercel.
+// Товарів у карті — не всі 43 тис., а ~800 найкращих (фото, сумісність,
+// опис > 200 символів). Карта на 29 тис. адрес при 4,5 тис. в індексі —
+// сигнал низької якості для молодого сайту. Список id готує
+// scripts/sitemap-products.mjs; коли ці увійдуть в індекс — наступна хвиля.
+//
+// Маршрутизація — у vercel.json.
+
+import { SITEMAP_PRODUCT_IDS } from './_lib/sitemapProducts.mjs';
 
 const SITE = 'https://autoshopmarket.com.ua';
 const SUPABASE_URL = 'https://vhvedefyixgluayqahhh.supabase.co';
 const SUPABASE_ANON =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZodmVkZWZ5aXhnbHVheXFhaGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNzE0OTEsImV4cCI6MjA5NjY0NzQ5MX0.RMK8MjUTTOO4slWV5kQw5ue7oAkUQyBFhaXhqz3FGtM';
 
-// Supabase віддає максимум 1000 рядків за запит, тож сторінка карти — це
-// PAGE_BATCHES паралельних запитів. 8000 адрес ≈ 700 КБ відповіді: з запасом
-// під ліміт Vercel (4,5 МБ) і під ліміт Google (50 000 адрес на файл).
+// Supabase віддає максимум 1000 рядків за запит
 const BATCH = 1000;
-const PAGE_BATCHES = 8;
-const CHUNK = BATCH * PAGE_BATCHES;
-
-// Заглушки постачальника в карту не заявляємо
-const PLACEHOLDER = 'Замовити будь-який товар*';
-// Спільний фільтр товарів: у наявності й не заглушка
-const LIVE = `available=eq.true&name=not.ilike.${encodeURIComponent(PLACEHOLDER)}`;
 
 // Занадто дрібні підбірки (1-2 товари) в карту не заявляємо: сторінка майже
 // порожня, а краулінговий бюджет витрачається.
 const MIN_ITEMS = 3;
 
-const sb = async (path, { count = false } = {}) => {
+const sb = async (path) => {
   const headers = { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` };
-  // Точний count по available падає по таймауту — індексу на цій колонці
-  // немає. Оцінка планувальника віддається за ~300 мс і розходиться
-  // з реальністю менш ніж на 1%: для «скільки файлів» цього досить.
-  if (count) { headers.Prefer = 'count=estimated'; headers.Range = '0-0'; }
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers });
   if (!r.ok) throw new Error(`supabase ${r.status}`);
-  return { rows: await r.json(), range: r.headers.get('content-range') };
+  return { rows: await r.json() };
 };
 
 const toSlug = (s) =>
@@ -52,37 +45,31 @@ const toSlug = (s) =>
 // як того вимагає стандарт sitemap
 const catalogLoc = (parts) => '/catalog/' + parts.map(encodeURIComponent).join('/');
 
-const today = () => new Date().toISOString().slice(0, 10);
-
-/** Обгортка <urlset>. changefreq і priority свідомо не пишемо: Google їх
- *  офіційно ігнорує, а вони роздували відповідь удвічі. */
-export const urlset = (paths) =>
+/**
+ * Обгортка <urlset>. entries — { path, lastmod?, priority }.
+ * lastmod ставимо лише коли знаємо справжню дату: однакова «сьогоднішня»
+ * дата на всіх адресах вчить Google ігнорувати lastmod зовсім.
+ * priority: головна 1.0, категорії й підбір 0.8, товари 0.6.
+ */
+export const urlset = (entries) =>
   '<?xml version="1.0" encoding="UTF-8"?>\n' +
   '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-  paths.map((p) => `  <url><loc>${SITE}${p}</loc><lastmod>${today()}</lastmod></url>`).join('\n') +
+  entries.map(({ path, lastmod, priority }) =>
+    `  <url><loc>${SITE}${path}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}<priority>${priority}</priority></url>`
+  ).join('\n') +
   '\n</urlset>\n';
 
-export const sitemapIndex = (count) =>
+export const SITEMAP_FILES = 2;
+export const sitemapIndex = () =>
   '<?xml version="1.0" encoding="UTF-8"?>\n' +
   '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-  Array.from({ length: count }, (_, i) =>
-    `  <sitemap><loc>${SITE}/sitemap-${i + 1}.xml</loc><lastmod>${today()}</lastmod></sitemap>`
-  ).join('\n') +
+  Array.from({ length: SITEMAP_FILES }, (_, i) => `  <sitemap><loc>${SITE}/sitemap-${i + 1}.xml</loc></sitemap>`).join('\n') +
   '\n</sitemapindex>\n';
 
-/**
- * Скільки всього файлів. Точний count по available падає по таймауту
- * (індексу на цю колонку немає), тому беремо оцінку планувальника — вона
- * розходиться з реальністю менш ніж на 1%. Запас 10% на випадок, якщо
- * оцінка виявиться заниженою: зайвий файл віддасть порожній, але валідний
- * urlset, а от загублені адреси Google уже не побачить.
- */
-export function fileCount(estimate) {
-  const products = Math.ceil((estimate * 1.1) / CHUNK);
-  return 1 + Math.max(1, products); // 1-й файл — головна, категорії, підбір
-}
-
 /** Перша сторінка: головна, категорії й підбір за авто. */
+export const hubEntries = (categories, cars) =>
+  hubPaths(categories, cars).map((path) => ({ path, priority: path === '/' ? '1.0' : '0.8' }));
+
 export function hubPaths(categories, cars) {
   const paths = ['/'];
   for (const c of categories) paths.push(`/category/${encodeURIComponent(c.replace(/\//g, '-'))}`);
@@ -174,48 +161,21 @@ const retry = async (fn) => {
 };
 
 /**
- * Межа сторінки N: id товару на позиції N*CHUNK у ПОВНІЙ таблиці, без
- * фільтра наявності.
- *
- * Чому без фільтра: offset із `available=eq.true` на глибині коштує
- * 0,4-3 с і на Vercel стабільно відвалювався — сторінки 3-8 віддавали
- * порожню карту, хоча локально збирались. Той самий offset по чистому
- * первинному ключу — 255-300 мс і жодного збою.
- *
- * Нерівність сторінок від цього не страшна: важливо, щоб діапазони
- * покривали всі товари й не перетинались, а скільки саме адрес у кожному
- * файлі — Google байдуже, доки їх менше 50 000.
+ * Відібрані товари. Наявність перевіряємо щоразу: товар, який зник або
+ * закінчився після відбору, у карту не заявляємо. lastmod — created_at:
+ * колонки updated_at у таблиці немає.
  */
-async function boundaryId(nth) {
-  const { rows } = await retry(() =>
-    sb(`products?select=id&order=id.asc&offset=${nth - 1}&limit=1`)
-  );
-  return rows.length ? rows[0].id : null;
-}
+export const productEntries = (rows) =>
+  rows.map((p) => ({ path: `/product/${p.id}`, lastmod: String(p.created_at ?? '').slice(0, 10) || null, priority: '0.6' }));
 
-/**
- * Сторінка N товарів: keyset-обхід у межах діапазону id.
- * Заміряно: keyset — стабільні 155-235 мс на 1000 рядків, offset на
- * глибині — до 3 с і час від часу 500.
- */
-async function loadProductPage(page) {
-  const lo = page === 1 ? 0 : await boundaryId((page - 1) * CHUNK);
-  if (lo === null) return [];                       // сторінка за межами каталогу
-  const hiId = await boundaryId(page * CHUNK);      // null на останній сторінці
-  const upper = hiId === null ? '' : `&id=lte.${hiId}`;
-
-  const out = [];
-  let cursor = lo;
-  for (let i = 0; i < CHUNK / BATCH + 2; i++) {
-    const { rows } = await retry(() =>
-      sb(`products?select=id&${LIVE}&id=gt.${cursor}${upper}&order=id.asc&limit=${BATCH}`)
-    );
-    if (!rows.length) break;
-    out.push(...rows);
-    cursor = rows[rows.length - 1].id;
-    if (rows.length < BATCH) break;
-  }
-  return out.map((p) => `/product/${p.id}`);
+async function loadProducts(ids = SITEMAP_PRODUCT_IDS) {
+  const chunks = [];
+  // id у URL: 200 штук — ~1,5 КБ адреси, з запасом під ліміти
+  for (let i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200));
+  const parts = await Promise.all(chunks.map((c) =>
+    retry(() => sb(`products?select=id,created_at&available=eq.true&id=in.(${c.join(',')})&order=id.asc&limit=${BATCH}`))
+  ));
+  return parts.flatMap((p) => p.rows);
 }
 
 
@@ -228,15 +188,13 @@ export default async function handler(req, res) {
   const page = Number(Array.isArray(raw) ? raw[0] : raw);
 
   try {
-    if (!Number.isInteger(page) || page < 1) {
-      const { range } = await sb('products?select=id', { count: true });
-      return res.status(200).send(sitemapIndex(fileCount(estimateFrom(range))));
-    }
+    if (!Number.isInteger(page) || page < 1) return res.status(200).send(sitemapIndex());
     if (page === 1) {
-      const { cars, categories } = await loadHub();
-      return res.status(200).send(urlset(hubPaths(categories, cars)));
+      const { cars, categories } = await retry(loadHub);
+      return res.status(200).send(urlset(hubEntries(categories, cars)));
     }
-    return res.status(200).send(urlset(await loadProductPage(page - 1)));
+    if (page === 2) return res.status(200).send(urlset(productEntries(await loadProducts())));
+    return res.status(404).send(urlset([]));
   } catch (err) {
     console.error('sitemap:', err.message);
     // Порожня, але валідна карта краще за 500: Google повторить пізніше,
@@ -246,25 +204,17 @@ export default async function handler(req, res) {
   }
 }
 
-/** «0-0/50893» → 50893 */
-export const estimateFrom = (range) => Number(String(range ?? '').split('/')[1]) || 0;
-
 // ─── Самоперевірка: node api/sitemap.mjs ────────────────────
 async function demo() {
   const { default: assert } = await import('node:assert/strict');
 
-  // індекс
-  assert.equal(estimateFrom('0-0/50893'), 50893);
-  assert.equal(estimateFrom(null), 0);
-  // 50893 товарів → 8000 на файл → 7 файлів товарів + 1 хаб
-  assert.equal(fileCount(50893), 8);
-  assert.equal(fileCount(0), 2, 'порожній каталог усе одно має хаб і одну сторінку');
-  const idx = sitemapIndex(fileCount(50893));
+  // індекс: хаб + відібрані товари
+  const idx = sitemapIndex();
   assert.match(idx, /<sitemapindex/);
-  assert.equal((idx.match(/<sitemap>/g) || []).length, 8);
-  assert.match(idx, /sitemap-1\.xml/);
-  assert.match(idx, /sitemap-8\.xml/);
-  assert.ok(!idx.includes('sitemap-9.xml'));
+  assert.equal((idx.match(/<sitemap>/g) || []).length, 2);
+  assert.match(idx, /sitemap-2\.xml/);
+  assert.ok(!idx.includes('sitemap-3.xml'));
+  assert.ok(SITEMAP_PRODUCT_IDS.length >= 500 && SITEMAP_PRODUCT_IDS.length <= 2000, 'товарів у карті не 500–2000');
 
   // хаб: головна + категорії + підбір
   const cars = [
@@ -286,14 +236,17 @@ async function demo() {
   assert.ok(!paths.includes('/catalog/acura/acura'));
   assert.ok(paths.some((p) => p.startsWith('/catalog/acura/usi/')));
 
-  // urlset
-  const xml = urlset(['/', '/product/42']);
+  // urlset: пріоритети й справжній lastmod
+  const hub = urlset(hubEntries(['Килимки'], []));
+  assert.match(hub, /<loc>https:\/\/autoshopmarket\.com\.ua\/<\/loc><priority>1\.0<\/priority>/);
+  assert.match(hub, /Килимки|%D0%9A/);
+  assert.match(hub, /<priority>0\.8<\/priority>/);
+  assert.ok(!hub.includes('<lastmod>'), 'хабу вигадано дату');
+  const xml = urlset(productEntries([{ id: 42, created_at: '2026-07-15T07:06:27+00:00' }, { id: 43 }]));
   assert.match(xml, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
-  assert.match(xml, /<loc>https:\/\/autoshopmarket\.com\.ua\/product\/42<\/loc>/);
-  assert.match(xml, /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
-  // changefreq/priority прибрані свідомо — Google їх ігнорує
+  assert.match(xml, /<loc>https:\/\/autoshopmarket\.com\.ua\/product\/42<\/loc><lastmod>2026-07-15<\/lastmod><priority>0\.6<\/priority>/);
+  assert.match(xml, /product\/43<\/loc><priority>0\.6/);
   assert.ok(!xml.includes('changefreq'));
-  assert.ok(!xml.includes('priority'));
   // порожня карта лишається валідною
   assert.match(urlset([]), /<urlset[^>]*>\s*<\/urlset>/);
 
