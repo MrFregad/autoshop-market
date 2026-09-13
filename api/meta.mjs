@@ -13,6 +13,8 @@
 //
 // Маршрутизація — у vercel.json (rewrites перед catch-all на /index.html).
 
+import { productTitle, clipWords } from '../src/lib/productTitle.js';
+
 const SITE = 'https://autoshopmarket.com.ua';
 const SUPABASE_URL = 'https://vhvedefyixgluayqahhh.supabase.co';
 const SUPABASE_ANON =
@@ -212,18 +214,39 @@ async function fetchProduct(id) {
   return p ?? null;
 }
 
+// Опис для видачі, 150–160 символів: назва, бренд, авто, перше речення опису,
+// ціна й наявність. Раніше був однаковий шаблон «Назва. Ціна. В наявності.»
+// на всіх картках. Немає опису — лишаємо старий шаблон.
+const DESCRIPTION_MAX = 160;
+export function productDescription(p, fit, inStock) {
+  const text = plain(p.description, 600);
+  if (!text) {
+    return clip(
+      `${p.name}${fit.all ? ` — сумісність: ${fit.all}.` : '.'} Ціна ${p.price} грн.` +
+        `${inStock ? ' В наявності.' : ' Під замовлення.'} Доставка Новою Поштою по Україні.`,
+      300
+    );
+  }
+  const brand = p.brand && !p.name.toLowerCase().includes(String(p.brand).toLowerCase()) ? ` — ${p.brand}` : '';
+  const head = `${p.name}${brand}.${fit.first ? ` Для ${fit.first}.` : ''}`;
+  const tail = ` Ціна ${p.price} грн, ${inStock ? 'в наявності' : 'під замовлення'}. Доставка по Україні 1-3 дні.`;
+  const budget = Math.min(90, DESCRIPTION_MAX - head.length - tail.length - 1);
+  let sentence = '';
+  if (budget >= 25) {
+    const first = (text.match(/^[\s\S]*?[.!?](?=\s|$)/)?.[0] ?? text).trim();
+    sentence = ' ' + clipWords(first, budget).replace(/([^.!?…])$/, '$1.');
+  }
+  return clipWords(head + sentence + tail, DESCRIPTION_MAX);
+}
+
 export function productPage(shell, p, rating = null) {
   const canonical = `${SITE}/product/${p.id}`;
   const image = Array.isArray(p.images) ? p.images[0] : null;
   const fit = carFit(p);
   const inStock = p.available !== false;
 
-  const title = clip(`${p.name}${fit.first ? ` для ${fit.first}` : ''}`, 65) + ' | AutoShop Market';
-  const description = clip(
-    `${p.name}${fit.all ? ` — сумісність: ${fit.all}.` : '.'} Ціна ${p.price} грн.` +
-      `${inStock ? ' В наявності.' : ' Під замовлення.'} Доставка Новою Поштою по Україні.`,
-    300
-  );
+  const title = productTitle(p.name, fit.first);
+  const description = productDescription(p, fit, inStock);
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -596,13 +619,30 @@ async function demo() {
 
   // сумісність робить заголовок унікальним — інакше 696 однакових <title>
   assert.match(html, /<title>[^<]*Toyota Camry/, 'модель авто не потрапила в title');
-  assert.ok(/<title>([\s\S]*?)<\/title>/.exec(html)[1].length <= 90, 'title задовгий');
+  const titleOf = (h) => /<title>([\s\S]*?)<\/title>/.exec(h)[1].replace(/&[a-z]+;/g, 'x');
+  assert.ok(titleOf(html).length <= 60, 'title задовгий');
+  const longName = 'Автопарфум TWINS Good girl gone bad лімітована серія подарункова';
+  const longTitle = productTitle(longName, 'Toyota Camry 2011-2017');
+  assert.ok(longTitle.length <= 60, `title задовгий: ${longTitle}`);
+  assert.match(longTitle, /… для Toyota Camry \| AutoShop Market$/);
+  assert.equal(productTitle('Килимки Toyota Camry XV50', 'Toyota Camry 2011-2017'), 'Килимки Toyota Camry XV50 | AutoShop Market');
+
+  // опис для видачі: бренд, перше речення, ціна; до 160 символів; keywords немає
+  const desc = productDescription(
+    { name: 'Автопарфум TWINS Good girl gone bad', brand: 'TWINS PARFUM', price: 928,
+      description: 'Стійкий аромат для салону на 60 днів. Друге речення не потрібне.' },
+    { first: '', all: '' }, true);
+  assert.equal(desc, 'Автопарфум TWINS Good girl gone bad — TWINS PARFUM. Стійкий аромат для салону на 60 днів. Ціна 928 грн, в наявності. Доставка по Україні 1-3 дні.');
+  assert.ok(desc.length <= 160);
+  assert.ok(!html.includes('name="keywords"'), 'meta keywords повернулись');
   // Авто НЕ повинно бути Product: Search Console вимагала б у нього ціну.
   // Єдиний Product на сторінці — сам товар, і в нього offers є.
   const products = html.split('"@type":"Product"').length - 1;
   assert.equal(products, 1, 'на сторінці більше одного Product — авто знову стало товаром');
   assert.ok(!html.includes('isAccessoryOrSparePartFor'), 'авто знову заявлене як товар');
-  assert.match(html, /content="[^"]*сумісність: Toyota Camry 2011–2017, Audi A4/);
+  assert.match(html, /name="description" content="[^"]*Для Toyota Camry 2011–2017\. Опис із HTML/);
+  const noDesc = productPage(shell, { ...base, description: '' });
+  assert.match(noDesc, /content="[^"]*сумісність: Toyota Camry 2011–2017, Audi A4/);
 
   // екранування працює і всередині стилізованої обгортки
   assert.match(html, /<h1[^>]*>Дефлектор &quot;Х&quot; &amp; &lt;тест&gt;<\/h1>/);

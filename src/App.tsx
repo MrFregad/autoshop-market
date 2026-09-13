@@ -17,6 +17,7 @@ import { supabase } from './supabaseClient';
 import { useProductStructuredData } from './hooks/useProductStructuredData';
 import { CatalogMegaMenu, CATEGORY_ICONS, DEFAULT_ICON } from './components/CatalogMegaMenu';
 import { catalogTree } from './catalogTree';
+import { productTitle } from './lib/productTitle.js';
 import { ChatWidget } from './components/ChatWidget';
 import { buildSearchFilters } from './lib/searchTranslate';
 import {
@@ -1766,7 +1767,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState('');
     let href = `${SITE_URL}/`;
 
     if (currentProduct) {
-      title = `${currentProduct.name} | AutoShop Market`;
+      title = productTitle(currentProduct.name, currentProduct.compatibility);
       href = `${SITE_URL}/product/${currentProduct.id}`;
     } else if (isSearching) {
       title = `Пошук: ${searchQuery.trim()} | AutoShop Market`;
@@ -2773,14 +2774,24 @@ const [selectedReviewImage, setSelectedReviewImage] = useState('');
                 <FileText className="w-4 h-4 text-purple-600" /> Характеристики
               </h3>
               <p className="text-xs text-slate-600 bg-purple-50/50 p-4 rounded-xl leading-6">{currentProduct.description || "Опис відсутній."}</p>
-              <table className="w-full text-xs">
-                <tbody className="divide-y">
-                  <tr><td className="py-3 text-slate-500 w-1/3">Сумісність</td><td className="py-3 text-slate-900 font-semibold">{currentProduct.compatibility || "—"}</td></tr>
-                  <tr><td className="py-3 text-slate-500">Виробник</td><td className="py-3 text-slate-800 font-semibold">{currentProduct.brand || "—"}</td></tr>
-                  <tr><td className="py-3 text-slate-500">Стан</td><td className="py-3 text-emerald-700 font-bold">{currentProduct.condition || "—"}</td></tr>
-                  <tr><td className="py-3 text-slate-500">Колір</td><td className="py-3 text-slate-800 font-medium">{currentProduct.color || "—"}</td></tr>
-                </tbody>
-              </table>
+              {/* Порожні рядки не показуємо: таблиця з прочерками гірша за коротку */}
+              {(() => {
+                const rows = [
+                  ['Сумісність', currentProduct.compatibility, 'text-slate-900 font-semibold'],
+                  ['Виробник', currentProduct.brand, 'text-slate-800 font-semibold'],
+                  ['Стан', currentProduct.condition, 'text-emerald-700 font-bold'],
+                  ['Колір', currentProduct.color, 'text-slate-800 font-medium'],
+                ].filter(([, value]) => value?.trim());
+                return rows.length > 0 && (
+                  <table className="w-full text-xs">
+                    <tbody className="divide-y">
+                      {rows.map(([label, value, cls]) => (
+                        <tr key={label}><td className="py-3 text-slate-500 w-1/3">{label}</td><td className={`py-3 ${cls}`}>{value}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </motion.div>
 
             <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-5 bg-white border rounded-2xl p-6 flex flex-col justify-between">
