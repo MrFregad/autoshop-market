@@ -14,6 +14,7 @@
 // Маршрутизація — у vercel.json (rewrites перед catch-all на /index.html).
 
 import { productTitle, clipWords } from '../src/lib/productTitle.js';
+import { buildProductJsonLd } from '../src/lib/productJsonLd.js';
 
 const SITE = 'https://autoshopmarket.com.ua';
 const SUPABASE_URL = 'https://vhvedefyixgluayqahhh.supabase.co';
@@ -82,7 +83,10 @@ export function injectMeta(shell, { title, description, canonical, image, jsonLd
   for (const block of [jsonLd].flat().filter(Boolean)) {
     // JSON.stringify екранує </script> недостатньо — ріжемо косу риску
     const safe = JSON.stringify(block).replace(/</g, '\\u003c');
-    html = html.replace('</head>', `  <script type="application/ld+json">${safe}</script>\n  </head>`);
+    // id — той самий, що ставить сайт: React прибирає серверний блок і
+    // додає свій, тож двох Product на сторінці не буває
+    const id = block['@type'] === 'Product' ? ' id="product-jsonld"' : '';
+    html = html.replace('</head>', `  <script type="application/ld+json"${id}>${safe}</script>\n  </head>`);
   }
 
   // Міняємо весь блок #root, а не лише порожній тег — на випадок, якщо в
@@ -189,19 +193,6 @@ async function hubProducts(filter, page = 1) {
 // PostgREST: елемент масиву з пробілами/комами треба брати в лапки
 const arrayContains = (col, value) => `${col}=cs.${encodeURIComponent(`{"${value}"}`)}`;
 
-// Оцінки для aggregateRating. Помилка не має ламати сторінку — просто
-// лишиться без зірочок у видачі.
-async function fetchRating(id) {
-  try {
-    const rows = await sbGet(`reviews?select=rating&product_id=eq.${encodeURIComponent(id)}`);
-    if (!rows.length) return null;
-    const sum = rows.reduce((a, r) => a + Number(r.rating || 0), 0);
-    return { value: Math.round((sum / rows.length) * 10) / 10, count: rows.length };
-  } catch {
-    return null;
-  }
-}
-
 async function fetchProduct(id) {
   const fields =
     'id,name,category,subcategory,price,images,brand,condition,description,compatibility,models,available';
@@ -239,7 +230,7 @@ export function productDescription(p, fit, inStock) {
   return clipWords(head + sentence + tail, DESCRIPTION_MAX);
 }
 
-export function productPage(shell, p, rating = null) {
+export function productPage(shell, p) {
   const canonical = `${SITE}/product/${p.id}`;
   const image = Array.isArray(p.images) ? p.images[0] : null;
   const fit = carFit(p);
@@ -248,50 +239,10 @@ export function productPage(shell, p, rating = null) {
   const title = productTitle(p.name, fit.first);
   const description = productDescription(p, fit, inStock);
 
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    name: p.name,
-    sku: String(p.id),
-    url: canonical,
-    ...(image ? { image } : {}),
-    ...(p.brand ? { brand: { '@type': 'Brand', name: p.brand } } : {}),
-    ...(p.category ? { category: [p.category, p.subcategory].filter(Boolean).join(' / ') } : {}),
-    // isAccessoryOrSparePartFor тут БУВ і його прибрано свідомо. За схемою
-    // це поле приймає Product, тож авто («Peugeot Partner Tepee 2008-2018»)
-    // ставало товаром без ціни — і Search Console позначила це критичною
-    // помилкою «задайте offers, review або aggregateRating» на КОЖНІЙ картці.
-    // Сумісність від цього не губиться: вона є в назві товару, в описі
-    // й у видимому тексті сторінки.
-    description: plain(p.description, 900) || p.name,
-    offers: {
-      '@type': 'Offer',
-      url: canonical,
-      price: String(p.price),
-      priceCurrency: 'UAH',
-      // «Під замовлення» — це BackOrder, а не OutOfStock: товар можна купити
-      availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/BackOrder',
-      itemCondition:
-        (p.condition || '').toLowerCase().startsWith('б') ||
-        (p.condition || '').toLowerCase().includes('вжив')
-          ? 'https://schema.org/UsedCondition'
-          : 'https://schema.org/NewCondition',
-      seller: { '@id': `${SITE}/#organization` },
-    },
-    // Зірочки у видачі. Додаємо лише коли відгуки справді є: вигаданий
-    // рейтинг — привід для ручних санкцій Google.
-    ...(rating
-      ? {
-          aggregateRating: {
-            '@type': 'AggregateRating',
-            ratingValue: String(rating.value),
-            reviewCount: String(rating.count),
-            bestRating: '5',
-            worstRating: '1',
-          },
-        }
-      : {}),
-  };
+  // isAccessoryOrSparePartFor у розмітці БУВ і його прибрано свідомо: авто
+  // ставало Product без ціни, і Search Console сварилась на кожній картці.
+  // Сумісність є в назві, описі й видимому тексті сторінки.
+  const jsonLd = buildProductJsonLd(p);
 
   const crumbs = breadcrumbs([
     { name: 'Головна', url: '/' },
@@ -544,7 +495,7 @@ export default async function handler(req, res) {
       // товару немає — чесний 404, щоб Google прибрав мертву адресу з індексу
       if (!p) return res.status(404).send(shell);
       res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-      return res.status(200).send(productPage(shell, p, await fetchRating(p.id)));
+      return res.status(200).send(productPage(shell, p));
     }
     if (type === 'search') {
       // кешувати нема сенсу: адрес нескінченно багато, а сторінка все одно noindex
@@ -613,7 +564,7 @@ async function demo() {
   assert.match(html, /<link rel="canonical" href="https:\/\/autoshopmarket\.com\.ua\/product\/271389" \/>/);
   assert.ok(!html.includes('<link rel="canonical" href="https://autoshopmarket.com.ua/" />'), 'старий canonical лишився');
   assert.match(html, /"@type":"Product"/);
-  assert.match(html, /"price":"450"/);
+  assert.match(html, /"price":450/);
   assert.ok(!/"description":"[^"]*<p>/.test(html), 'HTML протік у JSON-LD description');
   assert.match(html, /content="https:\/\/cdn\.example\/a\.jpg"/);
 
@@ -735,7 +686,7 @@ async function demo() {
 
   // ── 6.4 хлібні крихти ──
   const ldOf = (html) =>
-    [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) =>
+    [...html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)].map((m) =>
       JSON.parse(m[1].replace(/\\u003c/g, '<'))
     );
   const crumbOf = (html) => ldOf(html).find((d) => d['@type'] === 'BreadcrumbList');
@@ -744,12 +695,18 @@ async function demo() {
   assert.deepEqual(pc.itemListElement.map((i) => i.name), ['Головна', 'Дефлектори', base.name]);
   assert.equal(pc.itemListElement[0].position, 1);
 
-  // ── 6.5 рейтинг: тільки коли відгуки справді є ──
-  const noRating = ldOf(html).find((d) => d['@type'] === 'Product');
-  assert.ok(!noRating.aggregateRating, 'рейтинг вигаданий там, де відгуків немає');
-  const rated = ldOf(productPage(shell, base, { value: 4.7, count: 12 })).find((d) => d['@type'] === 'Product');
-  assert.equal(rated.aggregateRating.ratingValue, '4.7');
-  assert.equal(rated.aggregateRating.reviewCount, '12');
+  // ── 6.5 Merchant listings: доставка, повернення, без category і рейтингу ──
+  const ld = ldOf(html).find((d) => d['@type'] === 'Product');
+  assert.ok(ld.offers.shippingDetails && ld.offers.hasMerchantReturnPolicy, 'немає доставки/повернення');
+  assert.ok(!('category' in ld), 'category повернулась у розмітку');
+  assert.ok(!ld.aggregateRating && !ld.review, 'рейтинг без справжніх відгуків');
+  assert.equal(ld.offers.price, 450);
+  assert.equal(html.split('id="product-jsonld"').length - 1, 1, 'серверний Product без id — React продублює');
+  assert.equal(ld.offers.itemCondition, 'https://schema.org/NewCondition');
+  const used = ldOf(productPage(shell, { ...base, condition: 'Б/у', images: ['/img/x.jpg'], price: 2500 })).find((d) => d['@type'] === 'Product');
+  assert.equal(used.offers.itemCondition, 'https://schema.org/UsedCondition');
+  assert.deepEqual(used.image, ['https://autoshopmarket.com.ua/img/x.jpg']);
+  assert.equal(used.offers.shippingDetails.shippingRate.value, 0, 'від 2000 грн доставка безкоштовна');
 
   // ── 6.1 пагінація ──
   const items = [{ id: 1, name: 'Товар', price: 10 }];

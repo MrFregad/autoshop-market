@@ -1,60 +1,21 @@
 import { useEffect } from 'react';
+import { buildProductJsonLd } from '../lib/productJsonLd.js';
 
-interface Product {
-  id: number;
-  name: string;
-  category: string;
-  price: number;
-  old_price?: number;
-  images: string[];
-  brand?: string;
-  description?: string;
-  available?: boolean;
-}
+// Той самий id ставить сервер (api/meta.mjs), тож серверний блок теж
+// видаляється — на сторінці завжди рівно один Product.
+const SCRIPT_ID = 'product-jsonld';
 
-export function useProductStructuredData(product: Product | null) {
+export function useProductStructuredData(product: Parameters<typeof buildProductJsonLd>[0] | null) {
   useEffect(() => {
-    const scriptId = 'product-structured-data';
-    // Удаляем старый скрипт если есть
-    document.getElementById(scriptId)?.remove();
-
+    document.getElementById(SCRIPT_ID)?.remove();
     if (!product) return;
 
-    const data = {
-      "@context": "https://schema.org",
-      "@type": "Product",
-      "name": product.name,
-      "description": product.description || product.name,
-      "image": product.images[0] || '',
-      "brand": product.brand ? {
-        "@type": "Brand",
-        "name": product.brand
-      } : undefined,
-      "category": product.category,
-      "offers": {
-        "@type": "Offer",
-        "url": `https://autoshopmarket.com.ua/product/${product.id}`,
-        "priceCurrency": "UAH",
-        "price": product.price,
-        "availability": product.available === false
-          ? "https://schema.org/BackOrder"
-          : "https://schema.org/InStock",
-        "seller": {
-          "@type": "Organization",
-          "name": "AutoShop Market"
-        }
-      }
-    };
-
     const script = document.createElement('script');
-    script.id = scriptId;
+    script.id = SCRIPT_ID;
     script.type = 'application/ld+json';
-    script.textContent = JSON.stringify(data);
+    script.textContent = JSON.stringify(buildProductJsonLd(product));
     document.head.appendChild(script);
 
-    // Очищаем при закрытии товара
-    return () => {
-      document.getElementById(scriptId)?.remove();
-    };
+    return () => document.getElementById(SCRIPT_ID)?.remove();
   }, [product]);
 }
