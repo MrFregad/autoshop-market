@@ -18,6 +18,7 @@ import { useProductStructuredData } from './hooks/useProductStructuredData';
 import { CatalogMegaMenu, CATEGORY_ICONS, DEFAULT_ICON } from './components/CatalogMegaMenu';
 import { catalogTree } from './catalogTree';
 import { productTitle } from './lib/productTitle.js';
+import { FREE_SHIPPING_THRESHOLD } from './lib/pricing.js';
 import { ChatWidget } from './components/ChatWidget';
 import { buildSearchFilters } from './lib/searchTranslate';
 import {
@@ -665,7 +666,7 @@ const faqItems = [
   },
   {
     q: 'Скільки коштує та скільки триває доставка?',
-    a: 'Доставка «Новою Поштою» та «Укрпоштою» по всій Україні, зазвичай 1-3 дні. Вартість — за тарифами перевізника. При замовленні від 2000 ₴ доставка безкоштовна. Відправляємо з понеділка по суботу.',
+    a: `Доставка «Новою Поштою» та «Укрпоштою» по всій Україні, зазвичай 1-3 дні. Вартість — за тарифами перевізника. При замовленні від ${FREE_SHIPPING_THRESHOLD} ₴ доставка безкоштовна. Відправляємо з понеділка по суботу.`,
   },
   {
     q: 'Чи можна повернути або обміняти товар?',
@@ -737,7 +738,7 @@ const PromoBanner = () => (
     />
     <div className="relative z-10 flex items-center justify-center gap-2 text-xs font-semibold">
       <Zap className="w-4 h-4 text-yellow-300" />
-      <span>Безкоштовна доставка при замовленні від 2000 ₴</span>
+      <span>Безкоштовна доставка при замовленні від {FREE_SHIPPING_THRESHOLD} ₴</span>
       <span className="hidden sm:inline text-purple-200">|</span>
       <span className="hidden sm:inline">Знижки до -40% на популярні товари</span>
     </div>
@@ -2881,7 +2882,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState('');
                   <ul className="space-y-2 text-xs text-slate-600">
                     <li>Доставка «Новою Поштою» та «Укрпоштою»</li>
                     <li>Оплата при отриманні — готівка або картка</li>
-                    <li>Безкоштовна доставка від 2 000 ₴</li>
+                    <li>Безкоштовна доставка від {FREE_SHIPPING_THRESHOLD} ₴</li>
                     <li>Обмін та повернення протягом 14 днів</li>
                     <li>Перевірка товару перед оплатою</li>
                   </ul>
@@ -2974,6 +2975,13 @@ const [selectedReviewImage, setSelectedReviewImage] = useState('');
                     <span className="text-slate-500">Разом:</span>
                     <span className="text-xl font-black text-slate-900">{cartTotal} ₴</span>
                   </div>
+                  {cartTotal < FREE_SHIPPING_THRESHOLD ? (
+                    <p className="text-xs text-slate-500">
+                      До безкоштовної доставки не вистачає <b className="text-purple-700">{FREE_SHIPPING_THRESHOLD - cartTotal} ₴</b>
+                    </p>
+                  ) : (
+                    <p className="text-xs font-semibold text-green-700">Доставка безкоштовна 🎉</p>
+                  )}
                   <motion.button whileTap={{ scale: 0.98 }} onClick={() => { trackCheckoutStarted(cartCount, cartTotal); setIsCheckoutOpen(true); }} className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-3 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2">
                     Оформити замовлення <ChevronRight className="h-4 w-4" />
                   </motion.button>

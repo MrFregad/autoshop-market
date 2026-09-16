@@ -13,8 +13,8 @@
 // Переменные окружения (локально берутся из .env автоматически):
 //   DDAUDIO_API_TOKEN      — токен API из кабинета DD Audio (обязателен)
 //   SUPABASE_SERVICE_KEY   — service-ключ Supabase (для записи)
-//   DDAUDIO_MARKUP_PERCENT — наценка в % поверх цены API (по умолчанию 0:
-//                            продаём по РРЦ поставщика как есть)
+//   DDAUDIO_MARKUP_PERCENT — наценка в % поверх РРЦ (по умолчанию 0); влияет
+//                            только на товары без оптовой цены
 //
 // Что делает:
 //   • тянет розничный прайс постранично (10000 записей за запрос, ~11 страниц);
@@ -22,8 +22,12 @@
 //   • группирует записи по артикулу (sku): в прайсе один и тот же товар
 //     повторяется отдельной строкой для каждой совместимой модели авто —
 //     все марки/модели собираются в массивы marks/models и в compatibility;
-//   • price = РРЦ; если у товара действует акция (sale_price + даты) —
-//     price = акционная цена, old_price = обычная (на сайте появится скидка);
+//   • price = закупка × тир из src/lib/pricing.js (регрессивная наценка),
+//     закупка берётся из оптового прайса и пишется в products.cost_price;
+//     если товара нет в оптовом прайсе — price = РРЦ поставщика, а при
+//     действующей акции (sale_price + даты) — акционная цена с old_price;
+//   • товары с price_manual = true (цену правили руками) сохраняют свою
+//     цену: импорт обновляет им наличие, фото и закупку, но не цену;
 //   • категории/подкатегории API (русские) → украинские названия сайта
 //     по scripts/ddaudio-category-map.json (файл можно править руками);
 //   • upsert в products по (supplier, supplier_sku) — повторный запуск
@@ -39,6 +43,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { buildName } from './build-car-name.mjs';
+import { calculatePrice } from '../src/lib/pricing.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -138,32 +143,18 @@ async function apiGet(path, attempt = 1) {
 
 // ─── Защита от продажи ниже закупки ─────────────────────────
 // Розничный прайс (РРЦ) и оптовый (наша закупка) живут отдельно, причём
-// половина оптовых цен — в USD/EUR. Курс за сутки уезжает, а поставщик
-// иногда роняет розницу ниже нашего опта — так товар уходит в минус.
-// Поэтому тянем оптовый прайс и не даём цене опуститься ниже
-// закупка × (1 + MIN_MARGIN_PERCENT/100).
-// Поріг ціни: закупівля + 15%, але не менше ніж +150 грн прибутку.
-// Стеля × 2 — щоб дрібниця (лампочка за 8 грн) не злетіла до 158 грн.
-const MIN_MARGIN_PERCENT = Number(process.env.DDAUDIO_MIN_MARGIN_PERCENT || 15);
-const MIN_MARGIN_UAH = Number(process.env.DDAUDIO_MIN_MARGIN_UAH || 150);
-const MAX_MULTIPLIER = Number(process.env.DDAUDIO_MAX_MULTIPLIER || 2);
-
-const priceFloor = (costUah) =>
-  Math.ceil(Math.max(
-    costUah * (1 + MIN_MARGIN_PERCENT / 100),
-    Math.min(costUah + MIN_MARGIN_UAH, costUah * MAX_MULTIPLIER),
-  ));
-
-// node scripts/ddaudio-import.mjs --self-check
-if (process.argv.includes('--self-check')) {
-  const { strict: assert } = await import('node:assert');
-  assert.equal(priceFloor(8), 16);        // дрібниця: стеля ×2, а не +150
-  assert.equal(priceFloor(139.05), 279);  // бризковики: +150 дешевше за ×2
-  assert.equal(priceFloor(1000), 1150);   // дорогий товар: працює 15%
-  assert.equal(priceFloor(500), 650);     // межа: +150 ще виграє у 15%
-  console.log('ok');
-  process.exit(0);
-}
+// половина оптовых цен — в USD/EUR. Цену продажи считаем ОТ ЗАКУПКИ по
+// тирам из src/lib/pricing.js (регрессивная наценка + минимум в гривнах),
+// а РРЦ поставщика служит запасным вариантом для тех ~13 700 позиций,
+// которых нет в оптовом прайсе.
+// Курс уезжает за сутки, поэтому cost_price в базе — снимок на момент
+// импорта: он обновляется каждой ночью вместе с ценой.
+//
+// В оптовом прайсе попадаются заглушки: «1 EUR» (≈51 грн) у товара, который
+// сам поставщик продаёт за 1508 грн. Формула честно посчитала бы от неё 209
+// грн — и мы отдали бы товар втрое дешевле закупки. Поэтому закупку ниже
+// MIN_COST_RATIO от РРЦ считаем битой и берём РРЦ.
+const MIN_COST_RATIO = Number(process.env.DDAUDIO_MIN_COST_RATIO || 0.25);
 
 async function fetchRates() {
   // Курс НБУ; при недоступности — пропускаем защиту, а не ломаем импорт
@@ -229,7 +220,7 @@ function saleActive(item) {
 }
 
 // ─── 1. Тянем розничный прайс постранично ───────────────────
-console.log(`Импорт DD Audio${DRY_RUN ? ' [DRY-RUN]' : ''}${MARKUP_PERCENT ? ` (наценка ${MARKUP_PERCENT}%)` : ' (цены = РРЦ поставщика)'}`);
+console.log(`Импорт DD Audio${DRY_RUN ? ' [DRY-RUN]' : ''} (цены = закупка × тир из src/lib/pricing.js)`);
 console.log('Скачиваю розничный прайс (пауза 5.5 с между запросами)...');
 
 // Один товар (sku) идёт в прайсе отдельной записью на каждую совместимую
@@ -286,11 +277,10 @@ if (entriesFetched < totalResults * 0.9) {
 }
 
 // ─── 1а. Оптовые цены (закупка) для защиты от продажи в минус ─
-console.log(`Скачиваю оптовый прайс (порог: закупка +${MIN_MARGIN_PERCENT}% или +${MIN_MARGIN_UAH} грн, но не дороже ×${MAX_MULTIPLIER})...`);
+console.log('Скачиваю оптовый прайс (из него считаются цены продажи по тирам)...');
 const rates = await fetchRates();
 if (rates) console.log(`  курс НБУ: USD ${rates.USD.toFixed(2)}, EUR ${rates.EUR.toFixed(2)}`);
 const wholesale = rates ? await fetchWholesale(rates) : new Map();
-let raisedCount = 0, raisedMax = 0;
 
 // ─── 1б. Собираем карточки товаров из групп ─────────────────
 const products = [];
@@ -299,6 +289,10 @@ const feedSkus = new Set();
 // сайт подсвечивает в подборе категории, где для выбранного авто пусто
 const pairCats = new Map(); // 'mark|model' → { категория: { подкатегория: count } }
 let saleCount = 0, variantCount = 0;
+let pricedFromCost = 0, pricedFromRrp = 0;
+const tierCount = {};
+const marketCheck = [];
+const brokenCost = [];
 
 for (const [sku, g] of bySku) {
   const item = g.item;
@@ -306,30 +300,33 @@ for (const [sku, g] of bySku) {
   if (!category) { skipped++; continue; }
   const subcategory = mapSubcategory((item.subcategory || '').trim());
 
-  // Цена: РРЦ (+ опциональная наценка); при действующей акции — скидка
-  let price = withMarkup(Number(item.price));
-  let oldPrice = null;
-  if (saleActive(item)) {
-    const salePrice = withMarkup(Number(item.sale_price));
-    if (salePrice < price) {
-      oldPrice = price;
-      price = salePrice;
-      saleCount++;
-    }
-  }
-
-  // Пол цены: закупка + минимальная наценка. Ниже не опускаемся никогда —
-  // ни из-за акции поставщика, ни из-за скачка курса.
+  // Цена: закупка × тир (src/lib/pricing.js). Нет закупки в оптовом
+  // прайсе — откатываемся на РРЦ поставщика с его акцией.
   const costUah = costOf(wholesale, sku);
-  if (costUah) {
-    const floor = priceFloor(costUah);
-    if (price < floor) {
-      raisedCount++;
-      raisedMax = Math.max(raisedMax, floor - price);
-      price = floor;
-      // «Стара ціна» ниже новой — это уже не скидка, убираем
-      if (oldPrice && oldPrice <= price) oldPrice = null;
+  const rrp = Number(item.price);
+  const costBroken = costUah && rrp > 0 && costUah < rrp * MIN_COST_RATIO;
+  let price, oldPrice = null, costPrice = null;
+
+  if (costUah && !costBroken) {
+    costPrice = Math.round(costUah * 100) / 100;
+    const calc = calculatePrice(costUah);
+    price = calc.price;
+    oldPrice = calc.oldPrice;
+    pricedFromCost++;
+    tierCount[calc.tierIndex] = (tierCount[calc.tierIndex] || 0) + 1;
+    if (calc.needsMarketCheck) marketCheck.push({ sku, name: item.title, cost: costPrice, price });
+  } else {
+    if (costBroken) brokenCost.push({ sku, cost: Math.round(costUah), rrp });
+    price = withMarkup(rrp);
+    if (saleActive(item)) {
+      const salePrice = withMarkup(Number(item.sale_price));
+      if (salePrice < price) {
+        oldPrice = price;
+        price = salePrice;
+        saleCount++;
+      }
     }
+    pricedFromRrp++;
   }
 
   const marks = [...g.marks].sort((a, b) => a.localeCompare(b, 'uk'));
@@ -377,6 +374,8 @@ for (const [sku, g] of bySku) {
     subcategory,
     price,
     old_price: oldPrice,
+    cost_price: costPrice,
+    price_updated_at: new Date().toISOString(),
     images: Array.isArray(item.images) ? item.images.slice(0, 10) : [],
     brand: (item.manufacturer || '').trim() || null,
     description: descLines.join('\n') || null,
@@ -393,8 +392,24 @@ for (const [sku, g] of bySku) {
   });
 }
 
-if (wholesale.size) {
-  console.log(`\nЗащита цен: поднято ${raisedCount} товаров (максимум +${raisedMax} грн)`);
+console.log(`
+Цены: по закупке ${pricedFromCost}, по РРЦ (нет опта) ${pricedFromRrp}`);
+if (pricedFromCost) {
+  const tiers = Object.keys(tierCount).sort((a, b) => a - b)
+    .map((i) => `тир ${Number(i) + 1}: ${tierCount[i]}`).join(', ');
+  console.log(`  распределение по тирам — ${tiers}`);
+}
+if (brokenCost.length) {
+  console.log(`  ⚠ битых оптовых цен (ниже ${Math.round(MIN_COST_RATIO * 100)}% от РРЦ, взяли РРЦ): ${brokenCost.length}`);
+  for (const b of brokenCost.slice(0, 5)) {
+    console.log(`    ${b.sku}  «закупка» ${b.cost} грн при РРЦ ${b.rrp} грн`);
+  }
+}
+if (marketCheck.length) {
+  console.log(`  ⚠ товаров с закупкой от 5000 грн — цену стоит сверить с конкурентами`);
+  for (const m of marketCheck.slice(0, 10)) {
+    console.log(`    ${m.sku}  закупка ${m.cost} → ${m.price} грн  ${String(m.name).slice(0, 50)}`);
+  }
 }
 
 // ─── 2. Статистика ──────────────────────────────────────────
@@ -549,24 +564,67 @@ if (REPLACE_PARSED) {
   console.log(`Чистка завершена: удалено ${deleted} товаров.`);
 }
 
-// 4b. Заливаем товары (upsert по supplier+supplier_sku)
-console.log(`\nЗаливаю ${products.length} товаров (upsert)...`);
-const CHUNK = 500;
-for (let i = 0; i < products.length; i += CHUNK) {
-  const chunk = products.slice(i, i + CHUNK);
-  const { error } = await supabase
+// Колонки ценообразования могли ещё не появиться (supabase/pricing_migration.sql) —
+// тогда заливаем без них, чтобы ночной импорт не падал на пустом месте.
+const { error: costProbe } = await supabase.from('products').select('cost_price').limit(1);
+const hasPricingColumns = !costProbe;
+if (!hasPricingColumns) {
+  console.warn('Колонок cost_price/price_manual нет — новое ценообразование ВЫКЛЮЧЕНО, цены на сайте остаются прежними.');
+  console.warn('Чтобы включить, выполните supabase/pricing_migration.sql. Ответ базы:', costProbe.message);
+}
+// Пока миграции нет — цены вообще не трогаем (обновляем только наличие,
+// фото и тексты). Выполнить SQL = включить новое ценообразование.
+const stripPricing = (rows) => hasPricingColumns
+  ? rows
+  : rows.map(({ cost_price, price_updated_at, price, old_price, ...rest }) => rest);
+
+// 4b. Товары с ручной ценой (price_manual) — цену им не перезаписываем:
+// её выставили руками под рынок. Наличие, фото и закупку обновляем.
+const manualSkus = new Set();
+for (let from = 0; hasPricingColumns; from += 1000) {
+  const { data, error } = await supabase
     .from('products')
-    .upsert(chunk, { onConflict: 'supplier,supplier_sku' });
+    .select('supplier_sku')
+    .eq('supplier', SUPPLIER)
+    .eq('price_manual', true)
+    .range(from, from + 999);
   if (error) {
-    console.error(`Ошибка upsert (чанк ${i}):`, error.message);
-    process.exit(1);
+    console.warn('Колонка price_manual недоступна (выполните supabase/pricing_migration.sql):', error.message);
+    break;
   }
-  if ((i / CHUNK) % 20 === 0 || i + CHUNK >= products.length) {
-    console.log(`  ${Math.min(i + CHUNK, products.length)} / ${products.length}`);
+  for (const r of data) manualSkus.add(r.supplier_sku);
+  if (data.length < 1000) break;
+}
+
+const autoRows = products.filter((p) => !manualSkus.has(p.supplier_sku));
+const manualRows = products
+  .filter((p) => manualSkus.has(p.supplier_sku))
+  .map(({ price, old_price, price_updated_at, ...rest }) => rest);
+
+// 4c. Заливаем товары (upsert по supplier+supplier_sku)
+async function upsertRows(rows, label) {
+  if (!rows.length) return;
+  console.log(`
+Заливаю ${rows.length} товаров (${label})...`);
+  const CHUNK = 500;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error } = await supabase
+      .from('products')
+      .upsert(rows.slice(i, i + CHUNK), { onConflict: 'supplier,supplier_sku' });
+    if (error) {
+      console.error(`Ошибка upsert (чанк ${i}):`, error.message);
+      process.exit(1);
+    }
+    if ((i / CHUNK) % 20 === 0 || i + CHUNK >= rows.length) {
+      console.log(`  ${Math.min(i + CHUNK, rows.length)} / ${rows.length}`);
+    }
   }
 }
 
-// 4c. Помечаем пропавшие из API товары как отсутствующие
+await upsertRows(stripPricing(autoRows), 'цена по формуле');
+await upsertRows(stripPricing(manualRows), 'ручная цена сохраняется');
+
+// 4d. Помечаем пропавшие из API товары как отсутствующие
 console.log('\nПроверяю товары, пропавшие из прайса...');
 const dbSkus = [];
 for (let from = 0; ; from += 1000) {
@@ -594,7 +652,7 @@ if (gone.length === 0) {
   }
 }
 
-// 4d. Пересобираем справочник car_models для «Підбір за авто»
+// 4e. Пересобираем справочник car_models для «Підбір за авто»
 console.log(`\nОбновляю справочник марок/моделей (${carModels.length} записей)...`);
 {
   // Проверяем, есть ли уже колонка categories (добавлена поздней миграцией).

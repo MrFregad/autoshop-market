@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types src/lib/searchTranslate.test.ts",
+    "test": "node --experimental-strip-types src/lib/searchTranslate.test.ts && node src/lib/pricing.js --self-check",
     "preview": "vite preview",
     "fb:catalog": "node scripts/generate-fb-catalog.mjs",
     "fb:post": "node scripts/fb-publish.mjs",

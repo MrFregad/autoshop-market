@@ -7,7 +7,8 @@
 //     SUPABASE_SERVICE_KEY=... USD=42 EUR=45 node scripts/import-products.mjs
 //
 // Решения (согласованы с владельцем):
-//  • price = Цена(из CSV) × курс_валюты × 1.5, old_price НЕ заполняем
+//  • закупка = Цена(из CSV) × курс_валюты → cost_price;
+//    price считается от неё по тирам src/lib/pricing.js
 //  • курс: USD/EUR из env (по умолчанию 42 / 45), UAH = 1
 //  • строки группируются по (Категория + Артикул) → одна карточка
 //    совместимые авто (Марка + Модель) собираются в compatibility
@@ -15,6 +16,7 @@
 //  • при заливке в БД сохраняем существующие товары Автохімії (Koch Chemie)
 
 import { createClient } from '@supabase/supabase-js';
+import { calculatePrice } from '../src/lib/pricing.js';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -23,12 +25,8 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const SRC_DIR = process.env.CSV_DIR || 'E:/';
 const RATES = { USD: Number(process.env.USD || 42), EUR: Number(process.env.EUR || 45), UAH: 1 };
 
-// Цена: базовая стоимость в гривнах +50%, но сама наценка не больше 1000 грн.
-const MARKUP_CAP_UAH = 1000;
-function priceFor(baseUAH) {
-  const markup = Math.min(baseUAH * 0.5, MARKUP_CAP_UAH);
-  return Math.round(baseUAH + markup);
-}
+// Цена продажи — закупка × тир из src/lib/pricing.js (единый источник правды
+// для всех импортов). Цена из CSV в валюте × курс = закупка в гривнах.
 
 const SUPABASE_URL = 'https://vhvedefyixgluayqahhh.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
@@ -126,13 +124,16 @@ const products = [];
 for (const g of groups.values()) {
   const rate = RATES[g.valuta] ?? 1;
   const baseUAH = g.cena * rate;
-  const price = priceFor(baseUAH);
+  const calc = calculatePrice(baseUAH);
   const compat = [...g.compat];
   products.push({
     name: g.name,
     category: g.category,
     subcategory: g.subcategory,
-    price,
+    price: calc.price,
+    old_price: calc.oldPrice,
+    cost_price: Math.round(baseUAH * 100) / 100,
+    price_updated_at: new Date().toISOString(),
     images: [...g.images],
     brand: g.brand,
     compatibility: compat.length ? compat.join(', ') : null,

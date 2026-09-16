@@ -13,7 +13,9 @@
 // Что делает:
 //   • скачивает фид, разбирает офферы (название, цена, фото, описание,
 //     бренд, артикул vendorCode, наличие);
-//   • цена продажи = дроп-цена + 50%, но наценка не больше 1000 грн
+//   • цена продажи = дроп-цена × тир (src/lib/pricing.js), сама дроп-цена
+//     сохраняется в products.cost_price; товары с price_manual = true
+//     сохраняют свою цену
 //     (то же правило, что и в scripts/import-products.mjs);
 //   • категории Dropt → категории сайта по scripts/dropt-category-map.json
 //     (файл можно править руками);
@@ -23,6 +25,7 @@
 //   • чужие товары (supplier != 'dropt') не трогает вообще.
 
 import { createClient } from '@supabase/supabase-js';
+import { calculatePrice } from '../src/lib/pricing.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,12 +39,8 @@ const SUPABASE_URL = 'https://vhvedefyixgluayqahhh.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const SUPPLIER = 'dropt';
 
-// Правило цены: дроп-цена +50%, но наценка не больше 1000 грн (как на сайте)
-const MARKUP_CAP_UAH = 1000;
-function priceFor(baseUAH) {
-  const markup = Math.min(baseUAH * 0.5, MARKUP_CAP_UAH);
-  return Math.round(baseUAH + markup);
-}
+// Цена продажи считается от дроп-цены по тирам из src/lib/pricing.js —
+// та же формула, что и у DD Audio. Дроп-цена пишется в products.cost_price.
 
 if (!FEED_URL) {
   console.error('Ошибка: не задан DROPT_FEED_URL (персональная ссылка на XML-фид из кабинета Dropt).');
@@ -113,6 +112,8 @@ console.log(`Офферов в фиде: ${offerBlocks.length}`);
 const products = [];
 const feedSkus = new Set();
 let skipped = 0;
+const tierCount = {};
+const marketCheck = [];
 
 for (const block of offerBlocks) {
   const attrs = block.match(/<offer ([^>]*)>/)[1];
@@ -135,11 +136,18 @@ for (const block of offerBlocks) {
 
   const { category, subcategory } = mapCategory(categoryId);
 
+  const calc = calculatePrice(price);
+  tierCount[calc.tierIndex] = (tierCount[calc.tierIndex] || 0) + 1;
+  if (calc.needsMarketCheck) marketCheck.push({ sku, name, cost: price, price: calc.price });
+
   products.push({
     name,
     category,
     subcategory,
-    price: priceFor(price),
+    price: calc.price,
+    old_price: calc.oldPrice,
+    cost_price: price,
+    price_updated_at: new Date().toISOString(),
     images,
     brand: vendor || null,
     description: descriptionHtml ? htmlToText(descriptionHtml) : null,
@@ -160,6 +168,15 @@ for (const p of products) {
   if (p.available) inStock++;
 }
 console.log(`\nТоваров к импорту: ${products.length} (в наличии: ${inStock}, пропущено битых/дублей: ${skipped})`);
+const tiers = Object.keys(tierCount).sort((a, b) => a - b)
+  .map((i) => `тир ${Number(i) + 1}: ${tierCount[i]}`).join(', ');
+console.log(`Цены посчитаны от дроп-цены — ${tiers}`);
+if (marketCheck.length) {
+  console.log(`⚠ ${marketCheck.length} товаров с закупкой от 5000 грн — цену стоит сверить с конкурентами`);
+  for (const m of marketCheck.slice(0, 10)) {
+    console.log(`   ${m.sku}  закупка ${m.cost} → ${m.price} грн  ${m.name.slice(0, 50)}`);
+  }
+}
 console.log('\nРаспределение по категориям сайта:');
 for (const k of Object.keys(stats).sort((a, b) => a.localeCompare(b, 'uk'))) {
   console.log(`  ■ ${k}  (${stats[k]})`);
@@ -185,20 +202,62 @@ if (!SERVICE_KEY) {
 }
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
-// upsert пачками: конфликт по (supplier, supplier_sku) → обновление записи
-console.log(`\nЗаливаю ${products.length} товаров (upsert)...`);
-const CHUNK = 200;
-for (let i = 0; i < products.length; i += CHUNK) {
-  const chunk = products.slice(i, i + CHUNK);
-  const { error } = await supabase
-    .from('products')
-    .upsert(chunk, { onConflict: 'supplier,supplier_sku' });
-  if (error) {
-    console.error(`Ошибка upsert (чанк ${i}):`, error.message);
-    process.exit(1);
-  }
-  console.log(`  ${Math.min(i + CHUNK, products.length)} / ${products.length}`);
+// Колонки ценообразования могли ещё не появиться (supabase/pricing_migration.sql) —
+// тогда заливаем без них, чтобы ночной импорт не падал на пустом месте.
+const { error: costProbe } = await supabase.from('products').select('cost_price').limit(1);
+const hasPricingColumns = !costProbe;
+if (!hasPricingColumns) {
+  console.warn('Колонок cost_price/price_manual нет — новое ценообразование ВЫКЛЮЧЕНО, цены на сайте остаются прежними.');
+  console.warn('Чтобы включить, выполните supabase/pricing_migration.sql. Ответ базы:', costProbe.message);
 }
+// Пока миграции нет — цены вообще не трогаем (обновляем только наличие,
+// фото и тексты). Выполнить SQL = включить новое ценообразование.
+const stripPricing = (rows) => hasPricingColumns
+  ? rows
+  : rows.map(({ cost_price, price_updated_at, price, old_price, ...rest }) => rest);
+
+// Товары с ручной ценой (price_manual) — цену не перезаписываем
+const manualSkus = new Set();
+for (let from = 0; hasPricingColumns; from += 1000) {
+  const { data, error } = await supabase
+    .from('products')
+    .select('supplier_sku')
+    .eq('supplier', SUPPLIER)
+    .eq('price_manual', true)
+    .range(from, from + 999);
+  if (error) {
+    console.warn('Колонка price_manual недоступна (выполните supabase/pricing_migration.sql):', error.message);
+    break;
+  }
+  for (const r of data) manualSkus.add(r.supplier_sku);
+  if (data.length < 1000) break;
+}
+
+// upsert пачками: конфликт по (supplier, supplier_sku) → обновление записи
+async function upsertRows(rows, label) {
+  if (!rows.length) return;
+  console.log(`
+Заливаю ${rows.length} товаров (${label})...`);
+  const CHUNK = 200;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error } = await supabase
+      .from('products')
+      .upsert(rows.slice(i, i + CHUNK), { onConflict: 'supplier,supplier_sku' });
+    if (error) {
+      console.error(`Ошибка upsert (чанк ${i}):`, error.message);
+      process.exit(1);
+    }
+    console.log(`  ${Math.min(i + CHUNK, rows.length)} / ${rows.length}`);
+  }
+}
+
+await upsertRows(stripPricing(products.filter((p) => !manualSkus.has(p.supplier_sku))), 'цена по формуле');
+await upsertRows(
+  stripPricing(products
+    .filter((p) => manualSkus.has(p.supplier_sku))
+    .map(({ price, old_price, price_updated_at, ...rest }) => rest)),
+  'ручная цена сохраняется',
+);
 
 // ─── 5. Помечаем пропавшие из фида как отсутствующие ────────
 console.log('\nПроверяю товары, пропавшие из фида...');
