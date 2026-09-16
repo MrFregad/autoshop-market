@@ -18,3 +18,10 @@ comment on column products.price_manual is 'true = ціну виставили �
 -- Звіт «продаємо в мінус» і сортування за прибутком — без full scan
 create index if not exists products_cost_price_idx on products (cost_price)
   where cost_price is not null;
+
+-- Нічний імпорт щоразу питає «які товари цього постачальника з ручною ціною».
+-- Без цього індексу запит перебирає всі 100 тис. рядків і впирається
+-- у statement timeout Supabase — імпорт затирає ручні ціни або падає.
+create index if not exists products_price_manual_idx
+  on products (supplier, supplier_sku)
+  where price_manual;

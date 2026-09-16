@@ -43,6 +43,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { buildName } from './build-car-name.mjs';
+import { fetchSupplierSkus } from './supplier-skus.mjs';
 import { calculatePrice } from '../src/lib/pricing.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -580,20 +581,17 @@ const stripPricing = (rows) => hasPricingColumns
 
 // 4b. Товары с ручной ценой (price_manual) — цену им не перезаписываем:
 // её выставили руками под рынок. Наличие, фото и закупку обновляем.
-const manualSkus = new Set();
-for (let from = 0; hasPricingColumns; from += 1000) {
-  const { data, error } = await supabase
-    .from('products')
-    .select('supplier_sku')
-    .eq('supplier', SUPPLIER)
-    .eq('price_manual', true)
-    .range(from, from + 999);
+let manualSkus = new Set();
+if (hasPricingColumns) {
+  const { skus, error } = await fetchSupplierSkus(supabase, SUPPLIER, { manualOnly: true });
+  // Колонка есть (проверена выше), значит ошибка — это сбой запроса.
+  // Продолжить = затереть цены, выставленные руками, поэтому обрываем импорт.
   if (error) {
-    console.warn('Колонка price_manual недоступна (выполните supabase/pricing_migration.sql):', error.message);
-    break;
+    console.error('Не удалось прочитать товары с ручной ценой:', error.message);
+    console.error('Если это statement timeout — выполните supabase/pricing_migration.sql (индекс products_price_manual_idx).');
+    process.exit(1);
   }
-  for (const r of data) manualSkus.add(r.supplier_sku);
-  if (data.length < 1000) break;
+  manualSkus = new Set(skus);
 }
 
 const autoRows = products.filter((p) => !manualSkus.has(p.supplier_sku));
@@ -626,17 +624,8 @@ await upsertRows(stripPricing(manualRows), 'ручная цена сохраня
 
 // 4d. Помечаем пропавшие из API товары как отсутствующие
 console.log('\nПроверяю товары, пропавшие из прайса...');
-const dbSkus = [];
-for (let from = 0; ; from += 1000) {
-  const { data, error } = await supabase
-    .from('products')
-    .select('supplier_sku')
-    .eq('supplier', SUPPLIER)
-    .range(from, from + 999);
-  if (error) { console.error('Ошибка чтения:', error.message); process.exit(1); }
-  dbSkus.push(...data.map((r) => r.supplier_sku));
-  if (data.length < 1000) break;
-}
+const { skus: dbSkus, error: readErr } = await fetchSupplierSkus(supabase, SUPPLIER);
+if (readErr) { console.error('Ошибка чтения:', readErr.message); process.exit(1); }
 const gone = dbSkus.filter((sku) => sku && !feedSkus.has(sku));
 if (gone.length === 0) {
   console.log('Пропавших товаров нет.');
