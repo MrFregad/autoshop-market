@@ -365,7 +365,12 @@ export async function resolveCatalog([markSlug, modelSlug, catSlug, subSlug]) {
     // Які категорії взагалі є в цього авто — знає той самий довідник
     const q = `mark=eq.${encodeURIComponent(mark)}` + (model ? `&model=eq.${encodeURIComponent(model)}` : '');
     const merged = {};
-    for (const row of await sbGet(`car_models?select=categories&${q}&limit=500`)) {
+    // + рядок «*»: універсальні товари підходять будь-якому авто
+    const [own, uni] = await Promise.all([
+      sbGet(`car_models?select=categories&${q}&limit=500`),
+      sbGet('car_models?select=categories&mark=eq.*'),
+    ]);
+    for (const row of [...own, ...uni]) {
       for (const [c, subs] of Object.entries(row.categories || {})) {
         merged[c] ??= new Set();
         for (const s of Object.keys(subs)) merged[c].add(s);

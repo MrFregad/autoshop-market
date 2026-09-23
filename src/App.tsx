@@ -839,9 +839,13 @@ const Hero = ({ onBrowse, carData, onPick }: {
     (async () => {
       let q = supabase.from('car_models').select('categories').eq('mark', mark);
       if (model) q = q.eq('model', model);
-      const { data, error } = await q;
+      // Рядок «*» — категорії універсальних товарів, вони є для будь-якого авто
+      const [{ data, error }, { data: uni }] = await Promise.all([
+        q, supabase.from('car_models').select('categories').eq('mark', '*'),
+      ]);
       if (cancelled) return;
       if (error || !data) { setAvailCats(null); return; }
+      data.push(...(uni || []));
       // Без моделі підсумовуємо по всіх моделях марки
       const merged: Record<string, Record<string, number>> = {};
       for (const row of data as { categories: Record<string, Record<string, number>> | null }[]) {
@@ -1469,7 +1473,7 @@ const [selectedReviewImage, setSelectedReviewImage] = useState('');
         if (data.length < 1000) break;
       }
       const map: Record<string, string[]> = {};
-      for (const r of rows) (map[r.mark] ??= []).push(r.model);
+      for (const r of rows) if (r.mark !== '*') (map[r.mark] ??= []).push(r.model);
       setCarData(map);
     })();
   }, []);
@@ -1513,8 +1517,10 @@ const [selectedReviewImage, setSelectedReviewImage] = useState('');
       }
       // «Підбір за авто» — работает вместе с категорией и поиском.
       // marks/models — массивы (товар подходит нескольким авто), ищем вхождение
-      if (carModel) query = query.contains('models', [carModel]);
-      else if (carMark) query = query.contains('marks', [carMark]);
+      // Універсальні товари (marks = null) підходять будь-якому авто — показуємо й їх.
+      const pg = (v: string) => `{"${v.replace(/["\\]/g, '\\$&')}"}`;
+      if (carModel) query = query.or(`models.cs.${pg(carModel)},marks.is.null`);
+      else if (carMark) query = query.or(`marks.cs.${pg(carMark)},marks.is.null`);
       // Товари без наявності НЕ ховаємо: вони показуються з плашкою
       // «Під замовлення» і їх можна замовити — менеджер уточнює термін.
       return query;

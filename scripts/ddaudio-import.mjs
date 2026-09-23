@@ -642,6 +642,24 @@ if (gone.length === 0) {
 }
 
 // 4e. Пересобираем справочник car_models для «Підбір за авто»
+// Рядок «*» — категорії універсальних товарів (marks = null, з усіх
+// постачальників): сайт додає їх до категорій будь-якого вибраного авто.
+{
+  const cats = {};
+  for (let last = 0; ;) {
+    const { data, error } = await supabase.from('products').select('id,category,subcategory')
+      .is('marks', null).gt('id', last).order('id').limit(1000);
+    if (error) { console.warn('Не вдалося порахувати універсальні товари:', error.message); break; }
+    for (const r of data) {
+      if (!r.category) continue;
+      const sub = r.subcategory || 'Інше';
+      (cats[r.category] ??= {})[sub] = (cats[r.category][sub] || 0) + 1;
+    }
+    if (data.length < 1000) { carModels.push({ mark: '*', model: '*', categories: cats }); break; }
+    last = data.at(-1).id;
+  }
+}
+
 console.log(`\nОбновляю справочник марок/моделей (${carModels.length} записей)...`);
 {
   // Проверяем, есть ли уже колонка categories (добавлена поздней миграцией).
