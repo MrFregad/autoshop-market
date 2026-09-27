@@ -600,15 +600,31 @@ const manualRows = products
   .map(({ price, old_price, price_updated_at, ...rest }) => rest);
 
 // 4c. Заливаем товары (upsert по supplier+supplier_sku)
+// База иногда отвечает «statement timeout» на случайном чанке (временная
+// нагрузка) — повторяем с паузой, каждый раз дробя чанк пополам.
+async function upsertChunk(rows, attempt = 1) {
+  const { error } = await supabase
+    .from('products')
+    .upsert(rows, { onConflict: 'supplier,supplier_sku' });
+  if (!error) return null;
+  if (attempt >= 4) return error;
+  console.warn(`  сбой (${error.message}) — повтор ${attempt}/3 через ${10 * attempt} c, по ${Math.ceil(rows.length / 2)} шт.`);
+  await sleep(10000 * attempt);
+  const half = Math.ceil(rows.length / 2);
+  for (let j = 0; j < rows.length; j += half) {
+    const err = await upsertChunk(rows.slice(j, j + half), attempt + 1);
+    if (err) return err;
+  }
+  return null;
+}
+
 async function upsertRows(rows, label) {
   if (!rows.length) return;
   console.log(`
 Заливаю ${rows.length} товаров (${label})...`);
   const CHUNK = 500;
   for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await supabase
-      .from('products')
-      .upsert(rows.slice(i, i + CHUNK), { onConflict: 'supplier,supplier_sku' });
+    const error = await upsertChunk(rows.slice(i, i + CHUNK));
     if (error) {
       console.error(`Ошибка upsert (чанк ${i}):`, error.message);
       process.exit(1);
