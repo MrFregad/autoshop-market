@@ -118,7 +118,10 @@ export default async function handler(req, res) {
       }
       if (it.supplier === 'ddaudio') {
         const art = it.supplier_sku ? `, арт. ${it.supplier_sku}` : '';
-        return `${line}\n    🌐 Сайт: ddaudio.com.ua${art}`;
+        const url = it.supplier_sku
+          ? `\n    https://ddaudio.com.ua/search.html?search=${encodeURIComponent(it.supplier_sku)}`
+          : '';
+        return `${line}\n    🌐 Сайт: ddaudio.com.ua${art}${url}`;
       }
       return `${line}\n    🏠 Сайт: власний склад`;
     })
@@ -200,6 +203,10 @@ export default async function handler(req, res) {
     message += `\n🚀 Dropt: передано${droptResult.droptOrderId ? ` (№${droptResult.droptOrderId})` : ''}${droptResult.detail ? ` — ${droptResult.detail}` : ''}`;
   } else if (droptResult.status === 'error') {
     message += `\n⚠️ Dropt: ПОМИЛКА передачі — оформіть вручну!`;
+  }
+  // ponytail: у DD Audio немає API для замовлень — лише нагадування; адаптер як у Dropt, коли дадуть доступ
+  if (enrichedItems.some((it) => it.supplier === 'ddaudio')) {
+    message += `\n⚠️ DD Audio: оформіть ВРУЧНУ в кабінеті — https://ddaudio.com.ua/cart.html`;
   }
 
   try {
